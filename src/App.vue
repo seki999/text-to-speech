@@ -187,8 +187,101 @@ const speak = async () => {
     errorMessage.value = '请输入文本并选择语音。';
     return;
   }
-//  TODO
+
+  // 1. 捕获标签页音频
+  let stream: MediaStream;
+  try {
+    errorMessage.value = '请在弹窗中选择“此标签页”并勾选“共享此标签页的音频”';
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true
+    });
+    // 关闭视频轨道，节省资源
+    stream.getVideoTracks().forEach(t => t.stop());
+  } catch (err) {
+    errorMessage.value = '未能获取标签页音频，请允许浏览器权限并勾选音频。';
+    return;
+  }
+
+  // 2. 选择合适的 mimeType
+  const mimeCandidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus'
+  ];
+  let mimeType = '';
+  for (const c of mimeCandidates) {
+    if (MediaRecorder.isTypeSupported(c)) { mimeType = c; break; }
+  }
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  recordedChunks = [];
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstart = () => {
+    isRecording.value = true;
+    errorMessage.value = '正在录制，请等待朗读完成...';
+  };
+  mediaRecorder.onstop = () => {
+    isRecording.value = false;
+    errorMessage.value = '录制已完成，正在下载...';
+    const blob = new Blob(recordedChunks, { type: mediaRecorder!.mimeType || 'audio/webm' });
+    recordedChunks = [];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tts-audio.webm';
+    a.click();
+    // 释放音频轨道
+    stream.getAudioTracks().forEach(t => t.stop());
+    errorMessage.value = '录音已下载。';
+  };
+
+  // 3. 开始录音
+  mediaRecorder.start();
+
+  // 4. 朗读文本（与 readAloud 逻辑类似，但不高亮）
+  const lines = text.value.split('\n').filter(line => line.trim() !== '');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let utterText = line;
+    let voice: SpeechSynthesisVoice | undefined;
+
+    if (line.startsWith('Speaker 1:')) {
+      voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
+      utterText = line.replace(/^Speaker 1:\s*/, '');
+    } else if (line.startsWith('Speaker 2:')) {
+      voice = voices.value.find(v => v.voiceURI === speaker2VoiceURI.value);
+      utterText = line.replace(/^Speaker 2:\s*/, '');
+    } else {
+      voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
+    }
+
+    if (!voice) {
+      errorMessage.value = '未找到合适的语音，请从下拉列表中选择一个。';
+      mediaRecorder.stop();
+      return;
+    }
+
+    let utterance = new SpeechSynthesisUtterance(utterText);
+    utterance.voice = voice;
+
+    utterance.onerror = (event) => {
+      console.error('SpeechSynthesisUtterance.onerror', event);
+      errorMessage.value = `语音生成时发生错误: ${event.error}`;
+      mediaRecorder.stop();
+    };
+
+    await new Promise<void>((resolve) => {
+      utterance.onend = () => resolve();
+      synth.speak(utterance);
+    });
+  }
+
+  // 5. 停止录音并下载
+  mediaRecorder.stop();
 }
+
 // 新增朗读功能（不录音，仅朗读）
 const readAloud = async () => {
   if (synth.speaking) synth.cancel();
