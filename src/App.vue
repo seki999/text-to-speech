@@ -17,7 +17,8 @@ const errorMessage = ref('');
 const isRecording = ref(false);
 let mediaRecorder: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
-
+// 当前朗读行索引
+const currentLineIndex = ref<number | null>(null);
 
 // 获取 Web Speech API 的 SpeechSynthesis 实例
 const synth = window.speechSynthesis;
@@ -194,54 +195,47 @@ const readAloud = async () => {
 
   if (text.value !== '' && voices.value.length > 0) {
     errorMessage.value = '';
-    // 按行分割
     const lines = text.value.split('\n').filter(line => line.trim() !== '');
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       let utterText = line;
       let voice: SpeechSynthesisVoice | undefined;
 
       if (line.startsWith('Speaker 1:')) {
-        // 使用下拉框选择的 Speaker 1 语音
         voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
-        utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
+        utterText = line.replace(/^Speaker 1:\s*/, '');
       } else if (line.startsWith('Speaker 2:')) {
-        // 使用下拉框选择的 Speaker 2 语音
         voice = voices.value.find(v => v.voiceURI === speaker2VoiceURI.value);
-        utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
+        utterText = line.replace(/^Speaker 2:\s*/, '');
       } else {
-        // 其它情况：使用当前下拉框选择的语音
         voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
       }
 
       if (!voice) {
-        // 如果经过所有回退仍然找不到，才报错
-        if (line.startsWith('Speaker 1:')) {
-          errorMessage.value = '未为 "Speaker 1" 找到合适的语音。';
-        } else if (line.startsWith('Speaker 2:')) {
-          errorMessage.value = '未为 "Speaker 2" 找到合适的语音。';
-        } else {
-          errorMessage.value = '未找到合适的默认语音 (用于不带标记的文本)。';
-        }
+        errorMessage.value = '未找到合适的语音，请从下拉列表中选择一个。';
+        currentLineIndex.value = null;
         return;
       }
 
-      // 创建语音合成对象
+      // 设置当前高亮行
+      currentLineIndex.value = i;
+
       let utterance = new SpeechSynthesisUtterance(utterText);
       utterance.voice = voice;
 
-      // 错误处理
       utterance.onerror = (event) => {
         console.error('SpeechSynthesisUtterance.onerror', event);
         errorMessage.value = `语音生成时发生错误: ${event.error}`;
       };
 
-      // 等待当前朗读结束再朗读下一句
       await new Promise<void>((resolve) => {
         utterance.onend = () => resolve();
         synth.speak(utterance);
       });
     }
+    // 朗读结束后取消高亮
+    currentLineIndex.value = null;
   } else {
     errorMessage.value = '请输入文本并选择语音。';
   }
@@ -314,6 +308,17 @@ const readAloud = async () => {
       <div v-if="errorMessage" class="error-message">
         <p>{{ errorMessage }}</p>
       </div>
+
+      <!-- 新增的朗读行高亮显示区域 -->
+      <div class="read-lines-preview">
+        <div
+          v-for="(line, idx) in text.split('\n').filter(l => l.trim() !== '')"
+          :key="idx"
+          :class="['read-line', { active: idx === currentLineIndex }]"
+        >
+          {{ line }}
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -324,11 +329,11 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: #f0f2f5;
   color: #333;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
   margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* 顶部对齐，如果想垂直居中可用center */
 }
 
 .app-container {
@@ -336,9 +341,14 @@ body {
   padding: 2rem 3rem;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  width: 90vw;              /* 在中小屏幕上宽度为页面的90% */
-  max-width: 1200px;        /* 限制最大宽度，以保证在大屏幕上不会过宽 */
-  min-width: 400px;
+  width: 135vw;
+  max-width: 1800px;
+  min-width: 600px;
+  margin: 0 auto;         /* 水平居中 */
+  /* 移除 margin-top/margin-left/margin-right */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 header {
@@ -440,7 +450,7 @@ header p {
   border-radius: 8px;
   font-size: 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
-  min-height: 18rem;        /* 原来6行，扩大3倍为18行 */
+  min-height: 36rem;        /* 原来18rem，变为两倍36rem */
   resize: vertical;
 }
 
@@ -453,5 +463,27 @@ header p {
 .short-select {
   width: 7rem;
   min-width: 6rem;
+}
+
+/* 新增的朗读行高亮显示样式 */
+.read-lines-preview {
+  margin: 1.5rem 0 0 0;
+  background: #f7fafd;
+  border-radius: 8px;
+  padding: 1rem;
+  min-height: 3rem;
+  font-size: 1.1rem;
+}
+.read-line {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s;
+  font-size: 1.3em; /* 普通行字体也变大 */
+}
+.read-line.active {
+  background: #ffe082;
+  color: #e53935;      /* 高亮行字体为红色 */
+  font-weight: bold;
+  font-size: 1.5em; /* 高亮行字体更大 */
 }
 </style>
