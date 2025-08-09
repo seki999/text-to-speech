@@ -57,13 +57,32 @@ const speak = async () => {
       let voice: SpeechSynthesisVoice | undefined;
 
       // 判断当前行是否为 Speaker 1 或 Speaker 2，并自动选择语音
+      //
+      //
+      // 你可以在下拉框中看到所有可用的语音选项
+
       if (line.startsWith('Speaker 1:')) {
+        voice = voices.value.find(v => v.lang.startsWith('zh-TW'));
         // 汉语语音：选择第一个以 zh 开头的语音（如 zh-CN）
-        voice = voices.value.find(v => v.lang.startsWith('zh'));
+        // 可选的汉语语音（以 zh 开头，实际内容取决于你的浏览器和系统）例如：
+        // - Microsoft Huihui Online (Natural) - Chinese (Simplified, PRC) (zh-CN)
+        // - Microsoft Yaoyao Online (Natural) - Chinese (Simplified, PRC) (zh-CN)
+        // - Google 普通话（中国大陆）(zh-CN)
+        // - Google 粤语（香港）(zh-HK)
+        // - Google 國語（臺灣）(zh-TW)
         utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
       } else if (line.startsWith('Speaker 2:')) {
         // 英语语音：选择第一个以 en 开头的语音（如 en-US）
-        voice = voices.value.find(v => v.lang.startsWith('en'));
+        voice = voices.value.find(v => v.lang.startsWith('en-US'));
+        // 可选的英语语音（以 en 开头，实际内容取决于你的浏览器和系统）例如：
+        // - Microsoft Aria Online (Natural) - English (United States) (en-US)
+        // - Microsoft Guy Online (Natural) - English (United States) (en-US)
+        // - Google US English (en-US)
+        // - Google UK English Female (en-GB)
+        // - Google UK English Male (en-GB)
+        // - Google 英语（美国）(en-US)
+        // - Google 英语（英国）(en-GB)
+
         utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
       } else {
         // 其它情况：使用当前下拉框选择的语音
