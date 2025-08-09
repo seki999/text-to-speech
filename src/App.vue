@@ -5,10 +5,10 @@ import { ref, onMounted, watch } from 'vue';
 // 保存输入的文本
 const text = ref(''); 
 // 保存可用语音列表
-const voices = ref<SpeechSynthesisVoice[]>([]); 
-// 保存用户选择的语音URI
-const selectedVoiceURI = ref<string | null>(null); 
+const voices = ref<SpeechSynthesisVoice[]>([]);
 // 保存 Speaker 1 和 Speaker 2 的语音选择
+const speaker1Lang = ref('zh');
+const speaker2Lang = ref('en');
 const speaker1VoiceURI = ref<string | null>(null);
 const speaker2VoiceURI = ref<string | null>(null);
 // 保存错误信息
@@ -46,7 +46,6 @@ const populateVoiceList = () => {
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
-      selectedVoiceURI.value = voices.value[0]?.voiceURI;
     } else if (isEdge) {
       // 仅显示 Microsoft 语音包，且只包含中文（不含粤语）、日语、指定英语
       let msVoices = availableVoices.filter(voice =>
@@ -96,7 +95,6 @@ const populateVoiceList = () => {
           v.lang === 'en-NZ'
         )?.voiceURI ||
         voices.value[0]?.voiceURI;
-      selectedVoiceURI.value = voices.value[0]?.voiceURI;
     } else {
       // 其它浏览器，仅显示中文（不含粤语）、日语、英语
       voices.value = availableVoices.filter(voice =>
@@ -112,7 +110,6 @@ const populateVoiceList = () => {
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
-      selectedVoiceURI.value = voices.value[0]?.voiceURI;
     }
   } else {
     errorMessage.value = '您的浏览器不支持语音合成，或语音列表加载失败。';
@@ -134,10 +131,6 @@ onMounted(() => {
 // 监视 voices 的变化
 watch(voices, (newVoices) => {
   if (newVoices.length > 0) {
-    // 确保默认语音选择有效
-    if (!selectedVoiceURI.value || !newVoices.find(v => v.voiceURI === selectedVoiceURI.value)) {
-      selectedVoiceURI.value = newVoices[0].voiceURI;
-    }
     if (!newVoices.find(v => v.voiceURI === speaker1VoiceURI.value)) {
       speaker1VoiceURI.value = newVoices[0].voiceURI;
     }
@@ -146,6 +139,11 @@ watch(voices, (newVoices) => {
     }
   }
 });
+
+// 根据语言筛选语音列表
+const filteredVoicesByLang = (lang: string) => {
+  return voices.value.filter(v => v.lang.startsWith(lang));
+};
 
 // 将文本转换为语音并播放的函数
 const speak = async () => {
@@ -208,17 +206,17 @@ const speak = async () => {
         utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
       } else {
         // 其它情况：使用当前下拉框选择的语音
-        voice = voices.value.find(v => v.voiceURI === selectedVoiceURI.value);
+        voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
       }
 
       if (!voice) {
         // 如果经过所有回退仍然找不到，才报错
         if (line.startsWith('Speaker 1:')) {
-          errorMessage.value = '未找到任何可用的中文语音来朗读 "Speaker 1" 的内容。';
+          errorMessage.value = '未为 "Speaker 1" 找到合适的语音。';
         } else if (line.startsWith('Speaker 2:')) {
-          errorMessage.value = '未找到任何可用的英文语音来朗读 "Speaker 2" 的内容。';
+          errorMessage.value = '未为 "Speaker 2" 找到合适的语音。';
         } else {
-          errorMessage.value = '未找到合适的语音。请从下拉列表中选择一个。';
+          errorMessage.value = '未找到合适的默认语音 (用于不带标记的文本)。';
         }
         return;
       }
@@ -249,36 +247,50 @@ const speak = async () => {
   <div class="app-container">
     <header>
       <h1>文本转语音应用</h1>
-      <p>TypeScript & Vue.js</p>
     </header>
 
     <main>
+      <!-- Speaker 1 语音选择 -->
       <div class="control-group">
-        <label for="voice-select">默认语音 (用于不带标记的文本):</label>
-        <select id="voice-select" v-model="selectedVoiceURI" class="select-box">
-          <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
-            {{ voice.name }} ({{ voice.lang }})
-          </option>
-        </select>
+        <label>Speaker 1 语音:</label>
+        <div class="voice-select-row">
+          <select v-model="speaker1Lang" class="select-box short-select">
+            <option value="zh">汉语</option>
+            <option value="en">英语</option>
+            <option value="ja">日语</option>
+          </select>
+          <select v-model="speaker1VoiceURI" class="select-box">
+            <option
+              v-for="voice in filteredVoicesByLang(speaker1Lang)"
+              :key="voice.voiceURI"
+              :value="voice.voiceURI"
+            >
+              {{ voice.name }} ({{ voice.lang }})
+            </option>
+          </select>
+        </div>
       </div>
 
+      <!-- Speaker 2 语音选择 -->
       <div class="control-group">
-        <label for="speaker1-select">Speaker 1 语音:</label>
-        <select id="speaker1-select" v-model="speaker1VoiceURI" class="select-box">
-          <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
-            {{ voice.name }} ({{ voice.lang }})
-          </option>
-        </select>
+        <label>Speaker 2 语音:</label>
+        <div class="voice-select-row">
+          <select v-model="speaker2Lang" class="select-box short-select">
+            <option value="zh">汉语</option>
+            <option value="en">英语</option>
+            <option value="ja">日语</option>
+          </select>
+          <select v-model="speaker2VoiceURI" class="select-box">
+            <option
+              v-for="voice in filteredVoicesByLang(speaker2Lang)"
+              :key="voice.voiceURI"
+              :value="voice.voiceURI"
+            >
+              {{ voice.name }} ({{ voice.lang }})
+            </option>
+          </select>
+        </div>
       </div>
-      <div class="control-group">
-        <label for="speaker2-select">Speaker 2 语音:</label>
-        <select id="speaker2-select" v-model="speaker2VoiceURI" class="select-box">
-          <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
-            {{ voice.name }} ({{ voice.lang }})
-          </option>
-        </select>
-      </div>
-
 
       <div class="control-group">
         <label for="text-input">请输入文本:</label>
@@ -409,5 +421,15 @@ header p {
   transition: border-color 0.2s, box-shadow 0.2s;
   min-height: 18rem;        /* 原来6行，扩大3倍为18行 */
   resize: vertical;
+}
+
+.voice-select-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+.short-select {
+  width: 7rem;
+  min-width: 6rem;
 }
 </style>
