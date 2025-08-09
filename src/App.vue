@@ -13,6 +13,11 @@ const speaker1VoiceURI = ref<string | null>(null);
 const speaker2VoiceURI = ref<string | null>(null);
 // 保存错误信息
 const errorMessage = ref('');
+// 录音相关状态
+const isRecording = ref(false);
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+
 
 // 获取 Web Speech API 的 SpeechSynthesis 实例
 const synth = window.speechSynthesis;
@@ -174,11 +179,18 @@ const filteredVoicesByLang = (lang: string) => {
   return voices.value.filter(v => v.lang.startsWith(lang));
 };
 
-// 将文本转换为语音并播放的函数
+// 将文本转换为语音文件的函数  TODO
 const speak = async () => {
-  if (synth.speaking) {
-    synth.cancel();
+  if (synth.speaking) synth.cancel();
+  if (!text.value || voices.value.length === 0) {
+    errorMessage.value = '请输入文本并选择语音。';
+    return;
   }
+//  TODO
+}
+// 新增朗读功能（不录音，仅朗读）
+const readAloud = async () => {
+  if (synth.speaking) synth.cancel();
 
   if (text.value !== '' && voices.value.length > 0) {
     errorMessage.value = '';
@@ -188,42 +200,6 @@ const speak = async () => {
     for (const line of lines) {
       let utterText = line;
       let voice: SpeechSynthesisVoice | undefined;
-
-      // 判断当前行是否为 Speaker 1 或 Speaker 2，并自动选择语音
-      //
-      // 例如：
-      // if (line.startsWith('Speaker 1:')) { ... } // 朗读汉语
-      // if (line.startsWith('Speaker 2:')) { ... } // 朗读英语
-      //
-      // 如果你想指定男声或女声，可以这样写：
-      // 汉语女声:
-      //   voice = voices.value.find(v => v.lang.startsWith('zh') && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
-      // 汉语男声:
-      //   voice = voices.value.find(v => v.lang.startsWith('zh') && (v.name.includes('男') || v.name.toLowerCase().includes('male')));
-      // 台湾女声:
-      //   voice = voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
-      // 英语女声:
-      //   voice = voices.value.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'));
-      // 英语男声:
-      //   voice = voices.value.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('male'));
-      //
-      // 可选的汉语语音（以 zh 开头，实际内容取决于你的浏览器和系统）例如：
-      // - Microsoft Huihui Online (Natural) - Chinese (Simplified, PRC) (zh-CN) 女声
-      // - Microsoft Yaoyao Online (Natural) - Chinese (Simplified, PRC) (zh-CN) 女声
-      // - Microsoft Kangkang Online (Natural) - Chinese (Simplified, PRC) (zh-CN) 男声
-      // - Google 普通话（中国大陆）(zh-CN) 女声/男声
-      // - Google 國語（臺灣）(zh-TW) 女声/男声
-      //
-      // 可选的英语语音（以 en 开头，实际内容取决于你的浏览器和系统）例如：
-      // - Microsoft Aria Online (Natural) - English (United States) (en-US) 女声
-      // - Microsoft Guy Online (Natural) - English (United States) (en-US) 男声
-      // - Google US English (en-US) 女声/男声
-      // - Google UK English Female (en-GB) 女声
-      // - Google UK English Male (en-GB) 男声
-      // - Google 英语（美国）(en-US) 女声/男声
-      // - Google 英语（英国）(en-GB) 女声/男声
-      //
-      // 你可以在下拉框中看到所有可用的语音选项（包括男声和女声）
 
       if (line.startsWith('Speaker 1:')) {
         // 使用下拉框选择的 Speaker 1 语音
@@ -326,9 +302,14 @@ const speak = async () => {
         <textarea id="text-input" v-model="text" rows="6" class="text-area"></textarea>
       </div>
 
-      <button @click="speak" class="action-button">
-        转换为语音
-      </button>
+      <div style="display: flex; gap: 1rem; width: 100%;">
+        <button @click="readAloud" class="action-button">
+          朗读
+        </button>
+        <button @click="speak" class="action-button">
+          生成语音并下载
+        </button>
+      </div>
 
       <div v-if="errorMessage" class="error-message">
         <p>{{ errorMessage }}</p>
