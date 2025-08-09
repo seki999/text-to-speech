@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 
 // 定义响应式变量（状态）
 // 保存输入的文本
@@ -20,27 +20,73 @@ const synth = window.speechSynthesis;
 // 获取可用语音列表的函数
 const populateVoiceList = () => {
   const availableVoices = synth.getVoices();
+  // 检测浏览器类型
+  const ua = navigator.userAgent.toLowerCase();
+  const isEdge = ua.includes('edg');
+  const isChrome = !isEdge && ua.includes('chrome');
+
   if (availableVoices.length > 0) {
-    // 只筛选中文、日语、英语语音，且不包含粤语（zh-HK）
-    voices.value = availableVoices.filter(voice =>
-      (
+    if (isChrome) {
+      // 仅显示 Google 语音包，且只包含中文（不含粤语）、日语、英语
+      voices.value = availableVoices.filter(voice =>
+        voice.name.toLowerCase().includes('google') &&
+        (
+          (voice.lang.startsWith('zh') && voice.lang !== 'zh-HK') ||
+          voice.lang.startsWith('ja') ||
+          voice.lang.startsWith('en')
+        )
+      );
+      // Speaker 1 默认台湾
+      speaker1VoiceURI.value =
+        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // Speaker 2 默认 en-US
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // 为默认语音选择器设置初始值
+      selectedVoiceURI.value = voices.value[0]?.voiceURI;
+    } else if (isEdge) {
+      // 仅显示 Microsoft 语音包，且只包含中文（不含粤语）、日语、英语
+      voices.value = availableVoices.filter(voice =>
+        voice.name.toLowerCase().includes('microsoft') &&
+        (
+          (voice.lang.startsWith('zh') && voice.lang !== 'zh-HK') ||
+          voice.lang.startsWith('ja') ||
+          voice.lang.startsWith('en')
+        )
+      );
+      // Speaker 1 默认 Chinese Yaoyao
+      speaker1VoiceURI.value =
+        voices.value.find(v => v.name.toLowerCase().includes('yaoyao'))?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // Speaker 2 默认 English Mark
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.name.toLowerCase().includes('mark'))?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // 为默认语音选择器设置初始值
+      selectedVoiceURI.value = voices.value[0]?.voiceURI;
+    } else {
+      // 其它浏览器，仅显示中文（不含粤语）、日语、英语
+      voices.value = availableVoices.filter(voice =>
         (voice.lang.startsWith('zh') && voice.lang !== 'zh-HK') ||
         voice.lang.startsWith('ja') ||
         voice.lang.startsWith('en')
-      )
-    );
-    if (voices.value.length > 0) {
-      selectedVoiceURI.value = voices.value[0].voiceURI;
-      // Speaker 1 默认选择第一个台湾（zh-TW）语音，没有则选第一个中文
+      );
       speaker1VoiceURI.value =
         voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
-        voices.value.find(v => v.lang.startsWith('zh') && v.lang !== 'zh-HK')?.voiceURI ||
-        voices.value[0].voiceURI;
-      // Speaker 2 默认选择美国英语 Mark 男声，没有则选第一个英文
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
       speaker2VoiceURI.value =
-        voices.value.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('mark'))?.voiceURI ||
+        voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
-        voices.value[0].voiceURI;
+        voices.value[0]?.voiceURI;
+      // 为默认语音选择器设置初始值
+      selectedVoiceURI.value = voices.value[0]?.voiceURI;
     }
   } else {
     errorMessage.value = '您的浏览器不支持语音合成，或语音列表加载失败。';
@@ -54,6 +100,24 @@ onMounted(() => {
     synth.onvoiceschanged = populateVoiceList;
   } else {
     populateVoiceList();
+  }
+
+  speechSynthesis.getVoices().forEach(v => console.log(v.name, v.lang));
+});
+
+// 监视 voices 的变化
+watch(voices, (newVoices) => {
+  if (newVoices.length > 0) {
+    // 确保默认语音选择有效
+    if (!selectedVoiceURI.value || !newVoices.find(v => v.voiceURI === selectedVoiceURI.value)) {
+      selectedVoiceURI.value = newVoices[0].voiceURI;
+    }
+    if (!newVoices.find(v => v.voiceURI === speaker1VoiceURI.value)) {
+      speaker1VoiceURI.value = newVoices[0].voiceURI;
+    }
+    if (!newVoices.find(v => v.voiceURI === speaker2VoiceURI.value)) {
+      speaker2VoiceURI.value = newVoices.length > 1 ? newVoices[1].voiceURI : newVoices[0].voiceURI;
+    }
   }
 });
 
@@ -164,6 +228,15 @@ const speak = async () => {
 
     <main>
       <div class="control-group">
+        <label for="voice-select">默认语音 (用于不带标记的文本):</label>
+        <select id="voice-select" v-model="selectedVoiceURI" class="select-box">
+          <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
+            {{ voice.name }} ({{ voice.lang }})
+          </option>
+        </select>
+      </div>
+
+      <div class="control-group">
         <label for="speaker1-select">Speaker 1 语音:</label>
         <select id="speaker1-select" v-model="speaker1VoiceURI" class="select-box">
           <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
@@ -215,8 +288,9 @@ body {
   padding: 2rem 3rem;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 600px;
+  width: 90vw;              /* 在中小屏幕上宽度为页面的90% */
+  max-width: 1200px;        /* 限制最大宽度，以保证在大屏幕上不会过宽 */
+  min-width: 400px;
 }
 
 header {
@@ -298,5 +372,16 @@ header p {
   font-size: 0.9rem;
   color: #888;
   margin-top: 0.5rem;
+}
+
+.text-area {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 18rem;        /* 原来6行，扩大3倍为18行 */
+  resize: vertical;
 }
 </style>
