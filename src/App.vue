@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 
 // 定义响应式变量（状态）
 // 保存输入的文本
-const text = ref('こんにちは、これはテストです。'); 
+const text = ref(''); 
 // 保存可用语音列表
 const voices = ref<SpeechSynthesisVoice[]>([]); 
 // 保存用户选择的语音URI
@@ -56,16 +56,17 @@ const speak = async () => {
       let utterText = line;
       let voice: SpeechSynthesisVoice | undefined;
 
+      // 判断当前行是否为 Speaker 1 或 Speaker 2，并自动选择语音
       if (line.startsWith('Speaker 1:')) {
-        // 汉语语音
+        // 汉语语音：选择第一个以 zh 开头的语音（如 zh-CN）
         voice = voices.value.find(v => v.lang.startsWith('zh'));
-        utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀
+        utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
       } else if (line.startsWith('Speaker 2:')) {
-        // 英语语音
+        // 英语语音：选择第一个以 en 开头的语音（如 en-US）
         voice = voices.value.find(v => v.lang.startsWith('en'));
-        utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀
+        utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
       } else {
-        // 默认用当前选择
+        // 其它情况：使用当前下拉框选择的语音
         voice = voices.value.find(v => v.voiceURI === selectedVoiceURI.value);
       }
 
@@ -74,6 +75,7 @@ const speak = async () => {
         return;
       }
 
+      // 创建语音合成对象
       let utterance = new SpeechSynthesisUtterance(utterText);
       utterance.voice = voice;
 
