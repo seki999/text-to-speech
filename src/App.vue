@@ -42,34 +42,53 @@ onMounted(() => {
 });
 
 // 将文本转换为语音并播放的函数
-const speak = () => {
-  // 如果正在讲话则取消
+const speak = async () => {
   if (synth.speaking) {
     synth.cancel();
   }
 
-  // 确认输入文本不为空且已选择语音
-  if (text.value !== '' && selectedVoiceURI.value) {
-    // 创建 SpeechSynthesisUtterance 实例
-    const utterance = new SpeechSynthesisUtterance(text.value);
+  if (text.value !== '' && voices.value.length > 0) {
+    errorMessage.value = '';
+    // 按行分割
+    const lines = text.value.split('\n').filter(line => line.trim() !== '');
 
-    // 错误处理
-    utterance.onerror = (event) => {
-      console.error('SpeechSynthesisUtterance.onerror', event);
-      errorMessage.value = `语音生成时发生错误: ${event.error}`;
-    };
+    for (const line of lines) {
+      let utterText = line;
+      let voice: SpeechSynthesisVoice | undefined;
 
-    // 查找并设置所选语音
-    const selectedVoice = voices.value.find(voice => voice.voiceURI === selectedVoiceURI.value);
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    } else {
-      errorMessage.value = '未找到所选语音。';
-      return;
+      if (line.startsWith('Speaker 1:')) {
+        // 汉语语音
+        voice = voices.value.find(v => v.lang.startsWith('zh'));
+        utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀
+      } else if (line.startsWith('Speaker 2:')) {
+        // 英语语音
+        voice = voices.value.find(v => v.lang.startsWith('en'));
+        utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀
+      } else {
+        // 默认用当前选择
+        voice = voices.value.find(v => v.voiceURI === selectedVoiceURI.value);
+      }
+
+      if (!voice) {
+        errorMessage.value = '未找到合适的语音。';
+        return;
+      }
+
+      let utterance = new SpeechSynthesisUtterance(utterText);
+      utterance.voice = voice;
+
+      // 错误处理
+      utterance.onerror = (event) => {
+        console.error('SpeechSynthesisUtterance.onerror', event);
+        errorMessage.value = `语音生成时发生错误: ${event.error}`;
+      };
+
+      // 等待当前朗读结束再朗读下一句
+      await new Promise<void>((resolve) => {
+        utterance.onend = () => resolve();
+        synth.speak(utterance);
+      });
     }
-
-    // 开始播放语音
-    synth.speak(utterance);
   } else {
     errorMessage.value = '请输入文本并选择语音。';
   }
