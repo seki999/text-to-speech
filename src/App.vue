@@ -140,6 +140,22 @@ watch(voices, (newVoices) => {
   }
 });
 
+// 监视 Speaker 1 语言选择的变化
+watch(speaker1Lang, (newLang) => {
+  const filtered = filteredVoicesByLang(newLang);
+  if (filtered.length > 0) {
+    speaker1VoiceURI.value = filtered[0].voiceURI;
+  }
+});
+
+// 监视 Speaker 2 语言选择的变化
+watch(speaker2Lang, (newLang) => {
+  const filtered = filteredVoicesByLang(newLang);
+  if (filtered.length > 0) {
+    speaker2VoiceURI.value = filtered[0].voiceURI;
+  }
+});
+
 // 根据语言筛选语音列表
 const filteredVoicesByLang = (lang: string) => {
   return voices.value.filter(v => v.lang.startsWith(lang));
