@@ -67,6 +67,8 @@ const speak = async () => {
       //   voice = voices.value.find(v => v.lang.startsWith('zh') && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
       // 汉语男声:
       //   voice = voices.value.find(v => v.lang.startsWith('zh') && (v.name.includes('男') || v.name.toLowerCase().includes('male')));
+      // 台湾女声:
+      //   voice = voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
       // 英语女声:
       //   voice = voices.value.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'));
       // 英语男声:
@@ -92,8 +94,8 @@ const speak = async () => {
       // 你可以在下拉框中看到所有可用的语音选项（包括男声和女声）
 
       if (line.startsWith('Speaker 1:')) {
-        // 汉语语音：选择第一个以 zh 开头的语音（如 zh-CN）
-        voice = voices.value.find(v => v.lang.startsWith('zh'));
+        // 台湾女声：选择 zh-TW 且为女声的语音
+        voice = voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
         utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
       } else if (line.startsWith('Speaker 2:')) {
         // 英语语音：选择第一个以 en 开头的语音（如 en-US）
