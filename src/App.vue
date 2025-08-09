@@ -94,12 +94,32 @@ const speak = async () => {
       // 你可以在下拉框中看到所有可用的语音选项（包括男声和女声）
 
       if (line.startsWith('Speaker 1:')) {
-        // 台湾女声：选择 zh-TW 且为女声的语音
-        voice = voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female')));
+        // 寻找中文语音，带有多重回退机制
+        voice =
+          // 优先：台湾女声
+          voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female'))) ||
+          // 回退1：任何台湾语音
+          voices.value.find(v => v.lang === 'zh-TW') ||
+          // 回退2：大陆女声
+          voices.value.find(v => v.lang === 'zh-CN' && (v.name.includes('女') || v.name.toLowerCase().includes('female'))) ||
+          // 回退3：任何大陆语音
+          voices.value.find(v => v.lang === 'zh-CN') ||
+          // 回退4：任何中文语音
+          voices.value.find(v => v.lang.startsWith('zh'));
         utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
       } else if (line.startsWith('Speaker 2:')) {
-        // 英语语音：选择第一个以 en 开头的语音（如 en-US）
-        voice = voices.value.find(v => v.lang.startsWith('en'));
+        // 寻找英文语音，带有多重回退机制
+        voice =
+          // 优先：美国女声
+          voices.value.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('female')) ||
+          // 回退1：任何美国语音
+          voices.value.find(v => v.lang === 'en-US') ||
+          // 回退2：英国女声
+          voices.value.find(v => v.lang === 'en-GB' && v.name.toLowerCase().includes('female')) ||
+          // 回退3：任何英国语音
+          voices.value.find(v => v.lang === 'en-GB') ||
+          // 回退4：任何英文语音
+          voices.value.find(v => v.lang.startsWith('en'));
         utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
       } else {
         // 其它情况：使用当前下拉框选择的语音
@@ -107,7 +127,14 @@ const speak = async () => {
       }
 
       if (!voice) {
-        errorMessage.value = '未找到合适的语音。';
+        // 如果经过所有回退仍然找不到，才报错
+        if (line.startsWith('Speaker 1:')) {
+          errorMessage.value = '未找到任何可用的中文语音来朗读 "Speaker 1" 的内容。';
+        } else if (line.startsWith('Speaker 2:')) {
+          errorMessage.value = '未找到任何可用的英文语音来朗读 "Speaker 2" 的内容。';
+        } else {
+          errorMessage.value = '未找到合适的语音。请从下拉列表中选择一个。';
+        }
         return;
       }
 
