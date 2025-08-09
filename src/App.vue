@@ -46,18 +46,40 @@ const populateVoiceList = () => {
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
-      // 为默认语音选择器设置初始值
       selectedVoiceURI.value = voices.value[0]?.voiceURI;
     } else if (isEdge) {
-      // 仅显示 Microsoft 语音包，且只包含中文（不含粤语）、日语、英语
-      voices.value = availableVoices.filter(voice =>
+      // 仅显示 Microsoft 语音包，且只包含中文（不含粤语）、日语、指定英语
+      let msVoices = availableVoices.filter(voice =>
         voice.name.toLowerCase().includes('microsoft') &&
         (
           (voice.lang.startsWith('zh') && voice.lang !== 'zh-HK') ||
           voice.lang.startsWith('ja') ||
-          voice.lang.startsWith('en')
+          (
+            voice.lang === 'en-US' ||
+            voice.lang === 'en-GB' ||
+            voice.lang === 'en-AU' ||
+            voice.lang === 'en-CA' ||
+            voice.lang === 'en-NZ'
+          )
         )
       );
+      // 排序：汉语 -> 英语(美国>澳大利亚>加拿大>新西兰>英国) -> 日语
+      msVoices.sort((a, b) => {
+        const langOrder = (lang: string) => {
+          if (lang.startsWith('zh')) return 0;
+          // 英语细分
+          if (lang === 'en-US') return 1;
+          if (lang === 'en-AU') return 2;
+          if (lang === 'en-CA') return 3;
+          if (lang === 'en-NZ') return 4;
+          if (lang === 'en-GB') return 5;
+          if (lang.startsWith('en')) return 6;
+          if (lang.startsWith('ja')) return 7;
+          return 8;
+        };
+        return langOrder(a.lang) - langOrder(b.lang);
+      });
+      voices.value = msVoices;
       // Speaker 1 默认 Chinese Yaoyao
       speaker1VoiceURI.value =
         voices.value.find(v => v.name.toLowerCase().includes('yaoyao'))?.voiceURI ||
@@ -66,9 +88,14 @@ const populateVoiceList = () => {
       // Speaker 2 默认 English Mark
       speaker2VoiceURI.value =
         voices.value.find(v => v.name.toLowerCase().includes('mark'))?.voiceURI ||
-        voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value.find(v => 
+          v.lang === 'en-US' ||
+          v.lang === 'en-GB' ||
+          v.lang === 'en-AU' ||
+          v.lang === 'en-CA' ||
+          v.lang === 'en-NZ'
+        )?.voiceURI ||
         voices.value[0]?.voiceURI;
-      // 为默认语音选择器设置初始值
       selectedVoiceURI.value = voices.value[0]?.voiceURI;
     } else {
       // 其它浏览器，仅显示中文（不含粤语）、日语、英语
@@ -85,7 +112,6 @@ const populateVoiceList = () => {
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
-      // 为默认语音选择器设置初始值
       selectedVoiceURI.value = voices.value[0]?.voiceURI;
     }
   } else {
