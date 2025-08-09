@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>逐句朗读 + 跟读训练</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121832;
+      --muted: #8ea4c8;
+      --text: #e7ecf6;
+      --acc: #5b8cff;
+      --acc-2: #17c964;
+      --warn: #ffb020;
+      --danger: #ff5d5d;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; background: radial-gradient(1200px 600px at 20% -10%, #1a2345, #0b1020); color: var(--text); }
+    .container { max-width: 1200px; margin: 32px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 16px; }
+    header h1 { font-size: clamp(18px, 2.2vw, 28px); margin: 0; letter-spacing: 0.5px; }
+
+    .grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01)); border: 1px solid rgba(255,255,255,.08); box-shadow: var(--shadow); border-radius: var(--radius); }
+    .card-header { display:flex; align-items:center; justify-content:space-between; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .card-header h2 { margin:0; font-size: 14px; font-weight:600; color: var(--muted); letter-spacing: .3px; text-transform: uppercase; }
+    .card-body { padding: 14px; }
+
+    textarea, select, input[type="text"] { width: 100%; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); color: var(--text); border-radius: 12px; padding: 12px 14px; outline: none; transition: border-color .2s ease, box-shadow .2s ease; }
+    textarea::placeholder { color: #93a7c8aa; }
+    textarea:focus, select:focus, input[type="text"]:focus { border-color: var(--acc); box-shadow: 0 0 0 4px rgba(91,140,255,.15); }
+    textarea { min-height: 280px; resize: vertical; line-height: 1.5; }
+
+    .row { display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .btn { appearance:none; border: none; border-radius: 999px; padding: 10px 16px; font-weight: 600; color: white; cursor: pointer; transition: transform .08s ease, filter .2s ease, box-shadow .2s ease; box-shadow: var(--shadow); background: linear-gradient(180deg, #6b93ff, #4a6fff); }
+    .btn:hover { filter: brightness(1.05); }
+    .btn:active { transform: translateY(1px); }
+    .btn.secondary { background: linear-gradient(180deg, #2c335a, #1f2442); color: #d9e1ff; }
+    .btn.success { background: linear-gradient(180deg, #26d07c, #13b065); }
+    .btn.warn { background: linear-gradient(180deg, #ffc857, #ff9c2f); }
+    .btn.danger { background: linear-gradient(180deg, #ff7878, #f04747); }
+
+    .controls { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+    .pill { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); font-size: 12px; color: var(--muted); }
+
+    .status { display:flex; align-items:center; gap:8px; font-size: 12px; color: var(--muted); }
+    .dot { width:10px; height:10px; border-radius:50%; background:#64748b; box-shadow: 0 0 0 4px rgba(100,116,139,.12); }
+    .dot.speaking { background: var(--acc); }
+    .dot.listening { background: var(--acc-2); }
+    .dot.idle { background: #64748b; }
+
+    .current { font-size: 16px; line-height: 1.6; padding: 12px 14px; background: rgba(91,140,255,.08); border: 1px solid rgba(91,140,255,.25); border-radius: 12px; }
+
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal { width: min(520px, 96vw); background: var(--card); border: 1px solid rgba(255,255,255,.09); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+    .modal header { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .modal header h3 { margin:0; font-size: 16px; }
+    .modal .content { padding: 16px; }
+    .modal .actions { display:flex; gap:10px; justify-content:flex-end; padding: 12px 16px 16px; }
+
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding: 2px 6px; font-size: 12px; }
+    .small { font-size: 12px; color: var(--muted); }
+
+    @media (max-width: 900px){
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>逐句朗读 + 跟读训练 <span class="small">(Edge/Chrome · Web Speech API)</span></h1>
+      <div class="status" id="status"><span class="dot idle" id="statusDot"></span><span id="statusText">就绪</span></div>
+    </header>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>设置 / 控制</h2>
+        <div class="pill">提示：每行一条英文句子</div>
+      </div>
+      <div class="card-body">
+        <div class="row" style="gap:12px; align-items:flex-end;">
+          <div style="flex:2; min-width: 260px;">
+            <label class="small">粘贴你的英文句子（每行一句）</label>
+            <textarea id="inputText" placeholder="例如:\nI have a dream.\nLearning by speaking is effective.\nThis is a shadow DOM example."></textarea>
+          </div>
+          <div style="flex:1; min-width: 220px;">
+            <label class="small">选择英语发音（Voice）</label>
+            <select id="voiceSelect"></select>
+            <div class="row" style="margin-top:10px;">
+              <button class="btn" id="startBtn">开始</button>
+              <button class="btn secondary" id="pauseBtn">暂停</button>
+              <button class="btn secondary" id="resumeBtn">继续</button>
+              <button class="btn danger" id="stopBtn">停止</button>
+            </div>
+            <div style="margin-top:10px;" class="small">快捷键：<span class="kbd">Enter</span> 开始 / 下一句，<span class="kbd">Space</span> 暂停/继续，<span class="kbd">Esc</span> 停止</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px;">
+      <div class="card">
+        <div class="card-header">
+          <h2>进行中</h2>
+          <div class="pill" id="progress">0 / 0</div>
+        </div>
+        <div class="card-body">
+          <div class="current" id="currentSentence">当前没有句子</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>我的跟读识别结果</h2>
+          <div class="pill">Speech-to-Text</div>
+        </div>
+        <div class="card-body">
+          <textarea id="recognizedText" placeholder="你的英语跟读识别结果会出现在这里" readonly></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 朗读完成后的选择弹窗 -->
+  <div class="modal-backdrop" id="choiceModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="choiceTitle">
+      <header><h3 id="choiceTitle">这个句子要怎么继续？</h3></header>
+      <div class="content">
+        <p id="modalSentence" style="margin:0 0 8px 0; font-weight:600;"></p>
+        <p class="small" style="margin:0;">选择 <strong>再听一遍</strong> 来重复系统朗读；选择 <strong>跟读</strong> 进入语音输入模式，我们将把你的发音转成文字并与原句对比。</p>
+      </div>
+      <div class="actions">
+        <button class="btn secondary" id="cancelModal">取消</button>
+        <button class="btn warn" id="listenAgainBtn">再听一遍</button>
+        <button class="btn success" id="shadowBtn">跟读</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 跟读不一致时的处理弹窗 -->
+  <div class="modal-backdrop" id="mismatchModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mmTitle">
+      <header><h3 id="mmTitle">和原句不一致，下一步？</h3></header>
+      <div class="content">
+        <p style="margin:0 0 10px 0;">原句：</p>
+        <div class="current" id="mmOriginal" style="margin-bottom:10px"></div>
+        <p style="margin:0 0 10px 0;">你的识别：</p>
+        <div class="current" id="mmRecognized"></div>
+      </div>
+      <div class="actions">
+        <button class="btn warn" id="mmListenAgain">再听一遍</button>
+        <button class="btn success" id="mmReadAgain">我再读一遍</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Utilities ----------
+    const qs = (sel) => document.querySelector(sel);
+    const qsa = (sel) => Array.from(document.querySelectorAll(sel));
+    const statusDot = qs('#statusDot');
+    const statusText = qs('#statusText');
+    const setStatus = (mode, text) => {
+      statusDot.className = 'dot ' + (mode || 'idle');
+      statusText.textContent = text || '就绪';
+    };
+
+    const normalize = (s) => (s||'')
+      .toLowerCase()
+      .replace(/[^a-z'\s]/g, ' ') // 保留英文和撇号
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // ---------- TTS (SpeechSynthesis) ----------
+    const synth = window.speechSynthesis;
+    let voices = [];
+    const voiceSelect = qs('#voiceSelect');
+
+    function populateVoices() {
+      voices = synth.getVoices().filter(v => /en/i.test(v.lang));
+      voiceSelect.innerHTML = '';
+      if (voices.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '（未检测到英语语音，稍后再试）';
+        voiceSelect.appendChild(opt);
+        return;
+      }
+      voices.forEach((v, idx) => {
+        const opt = document.createElement('option');
+        opt.value = v.voiceURI;
+        opt.textContent = `${v.name} — ${v.lang}${v.default ? ' (默认)' : ''}`;
+        if (v.default && voiceSelect.selectedIndex === -1) opt.selected = true;
+        voiceSelect.appendChild(opt);
+      });
+      if (voiceSelect.selectedIndex === -1 && voices[0]) voiceSelect.value = voices[0].voiceURI;
+    }
+
+    populateVoices();
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.onvoiceschanged = () => {
+        // 某些浏览器会多次触发，去抖
+        const prev = voiceSelect.options.length;
+        populateVoices();
+        // 若之前已经选择过，尽量保持
+        if (prev && selectedVoiceURI && qsa('#voiceSelect option').some(o=>o.value===selectedVoiceURI)) {
+          voiceSelect.value = selectedVoiceURI;
+        }
+      };
+    }
+
+    let utter; // 当前 utterance
+    let selectedVoiceURI = '';
+
+    function speakSentence(text) {
+      return new Promise((resolve, reject) => {
+        if (!text) return resolve();
+        if (synth.speaking) {
+          try { synth.cancel(); } catch(e){}
+        }
+        utter = new SpeechSynthesisUtterance(text);
+        selectedVoiceURI = voiceSelect.value;
+        const v = voices.find(v => v.voiceURI === selectedVoiceURI) || voices[0];
+        if (v) utter.voice = v;
+        utter.rate = 1; // 可按需暴露给 UI
+        utter.pitch = 1;
+        utter.onstart = () => setStatus('speaking', '正在朗读…');
+        utter.onend = () => { setStatus('idle', '朗读完成'); resolve(); };
+        utter.onerror = (e) => { setStatus('idle', '朗读出错'); reject(e.error || e); };
+        synth.speak(utter);
+      });
+    }
+
+    function cancelSpeak(){ try { synth.cancel(); } catch(e){} }
+    function pauseSpeak(){ try { synth.pause(); } catch(e){} }
+    function resumeSpeak(){ try { synth.resume(); } catch(e){} }
+
+    // ---------- STT (SpeechRecognition) ----------
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    function initRecognition(){
+      if (!SpeechRecognition) return null;
+      const rec = new SpeechRecognition();
+      rec.lang = 'en-US';
+      rec.interimResults = false;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+      return rec;
+    }
+
+    function listenOnce(){
+      return new Promise((resolve, reject) => {
+        if (!recognition) recognition = initRecognition();
+        if (!recognition) {
+          return reject(new Error('此浏览器暂不支持语音识别（SpeechRecognition）。'));
+        }
+        setStatus('listening', '正在听你读…');
+        recognition.onresult = (ev) => {
+          const text = ev.results[0][0].transcript || '';
+          setStatus('idle', '识别完成');
+          resolve(text);
+        };
+        recognition.onerror = (e) => {
+          setStatus('idle', '识别出错');
+          reject(e.error || e);
+        };
+        recognition.onend = () => {
+          // 若未触发 result，仍要回到 idle
+          if (statusText.textContent.includes('听你读')) setStatus('idle', '识别结束');
+        };
+        try { recognition.start(); } catch (e) { reject(e); }
+      });
+    }
+
+    // ---------- App State ----------
+    const inputText = qs('#inputText');
+    const currentSentenceEl = qs('#currentSentence');
+    const recognizedTextEl = qs('#recognizedText');
+    const progressEl = qs('#progress');
+    const startBtn = qs('#startBtn');
+    const pauseBtn = qs('#pauseBtn');
+    const resumeBtn = qs('#resumeBtn');
+    const stopBtn = qs('#stopBtn');
+
+    let lines = [];
+    let idx = -1;
+    let running = false;
+
+    function refreshProgress(){ progressEl.textContent = `${Math.max(0, idx)}/${lines.length}`; }
+
+    function loadLines(){
+      lines = inputText.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      idx = -1;
+      refreshProgress();
+    }
+
+    function setCurrentSentence(text){
+      currentSentenceEl.textContent = text || '当前没有句子';
+    }
+
+    // ---------- Modals ----------
+    const choiceModal = qs('#choiceModal');
+    const modalSentence = qs('#modalSentence');
+    const cancelModal = qs('#cancelModal');
+    const listenAgainBtn = qs('#listenAgainBtn');
+    const shadowBtn = qs('#shadowBtn');
+
+    const mismatchModal = qs('#mismatchModal');
+    const mmOriginal = qs('#mmOriginal');
+    const mmRecognized = qs('#mmRecognized');
+    const mmListenAgain = qs('#mmListenAgain');
+    const mmReadAgain = qs('#mmReadAgain');
+
+    function openModal(el){ el.style.display = 'flex'; el.focus(); }
+    function closeModal(el){ el.style.display = 'none'; }
+
+    cancelModal.addEventListener('click', ()=> closeModal(choiceModal));
+
+    // ---------- Main flow ----------
+    async function startFlow(){
+      loadLines();
+      if (!lines.length) { alert('请先粘贴英文句子（每行一句）'); return; }
+      running = true;
+      await nextSentence();
+    }
+
+    async function nextSentence(){
+      if (!running) return;
+      idx++;
+      refreshProgress();
+      if (idx >= lines.length) {
+        setCurrentSentence('全部完成 🎉');
+        return;
+      }
+      const sentence = lines[idx];
+      setCurrentSentence(sentence);
+      await speakSentence(sentence);
+      modalSentence.textContent = sentence;
+      openModal(choiceModal);
+    }
+
+    async function handleListenAgain(){
+      closeModal(choiceModal);
+      await speakSentence(lines[idx]);
+      // 朗读结束后再次给出选择
+      modalSentence.textContent = lines[idx];
+      openModal(choiceModal);
+    }
+
+    async function handleShadowing(){
+      closeModal(choiceModal);
+      try {
+        const heard = await listenOnce();
+        recognizedTextEl.value = heard;
+        const same = normalize(heard) === normalize(lines[idx]);
+        if (same) {
+          await speakFeedback('Great! Moving to the next sentence.');
+          await nextSentence();
+        } else {
+          // 不一致，弹出处理对话框
+          mmOriginal.textContent = lines[idx];
+          mmRecognized.textContent = heard || '（空结果）';
+          openModal(mismatchModal);
+        }
+      } catch (e) {
+        alert('识别失败：' + (e && e.message ? e.message : e));
+      }
+    }
+
+    async function speakFeedback(text){
+      try { await speakSentence(text); } catch(e){}
+    }
+
+    async function handleMismatchListen(){
+      closeModal(mismatchModal);
+      await speakSentence(lines[idx]);
+      // 再次给出选择
+      modalSentence.textContent = lines[idx];
+      openModal(choiceModal);
+    }
+
+    async function handleMismatchRead(){
+      closeModal(mismatchModal);
+      try {
+        const heard = await listenOnce();
+        recognizedTextEl.value = heard;
+        const same = normalize(heard) === normalize(lines[idx]);
+        if (same) {
+          await speakFeedback('Nice! Next sentence.');
+          await nextSentence();
+        } else {
+          // 仍不一致，继续让用户选择
+          mmOriginal.textContent = lines[idx];
+          mmRecognized.textContent = heard || '（空结果）';
+          openModal(mismatchModal);
+        }
+      } catch (e) {
+        alert('识别失败：' + (e && e.message ? e.message : e));
+      }
+    }
+
+    // ---------- Controls ----------
+    startBtn.addEventListener('click', startFlow);
+    pauseBtn.addEventListener('click', () => { pauseSpeak(); setStatus('idle', '已暂停'); });
+    resumeBtn.addEventListener('click', () => { resumeSpeak(); setStatus('speaking', '继续朗读…'); });
+    stopBtn.addEventListener('click', () => { running = false; cancelSpeak(); setStatus('idle', '已停止'); });
+
+    listenAgainBtn.addEventListener('click', handleListenAgain);
+    shadowBtn.addEventListener('click', handleShadowing);
+
+    mmListenAgain.addEventListener('click', handleMismatchListen);
+    mmReadAgain.addEventListener('click', handleMismatchRead);
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!running) startFlow(); else nextSentence(); }
+      if (e.code === 'Space') { e.preventDefault(); if (synth.paused) resumeSpeak(); else pauseSpeak(); }
+      if (e.key === 'Escape') { running = false; cancelSpeak(); }
+    });
+
+    // 初始提示：检测识别可用性
+    window.addEventListener('load', () => {
+      if (!SpeechRecognition) {
+        const msg = '提示：此浏览器暂不支持 SpeechRecognition（语音识别）。在 Edge/Chrome 最新版一般可用，或需要在设置中开启相关权限。';
+        console.warn(msg);
+      }
+    });
+  </script>
+</body>
+</html>
