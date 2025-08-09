@@ -7,8 +7,8 @@ const text = ref('');
 // 保存可用语音列表
 const voices = ref<SpeechSynthesisVoice[]>([]);
 // 保存 Speaker 1 和 Speaker 2 的语音选择
-const speaker1Lang = ref('zh');
-const speaker2Lang = ref('en');
+const speaker1Lang = ref('en');
+const speaker2Lang = ref('zh');
 const speaker1VoiceURI = ref<string | null>(null);
 const speaker2VoiceURI = ref<string | null>(null);
 // 保存错误信息
@@ -19,6 +19,9 @@ const synth = window.speechSynthesis;
 
 // 获取可用语音列表的函数
 const populateVoiceList = () => {
+  // 防止在 speak() 触发 onvoiceschanged 时重复执行
+  if (voices.value.length > 0) return;
+
   const availableVoices = synth.getVoices();
   // 检测浏览器类型
   const ua = navigator.userAgent.toLowerCase();
@@ -36,15 +39,15 @@ const populateVoiceList = () => {
           voice.lang.startsWith('en')
         )
       );
-      // Speaker 1 默认台湾
+      // Speaker 1 默认 en-US
       speaker1VoiceURI.value =
-        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
-        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
-        voices.value[0]?.voiceURI;
-      // Speaker 2 默认 en-US
-      speaker2VoiceURI.value =
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // Speaker 2 默认台湾
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
         voices.value[0]?.voiceURI;
     } else if (isEdge) {
       // 仅显示 Microsoft 语音包，且只包含中文（不含粤语）、日语、指定英语
@@ -79,13 +82,8 @@ const populateVoiceList = () => {
         return langOrder(a.lang) - langOrder(b.lang);
       });
       voices.value = msVoices;
-      // Speaker 1 默认 Chinese Yaoyao
+      // Speaker 1 默认 English Mark
       speaker1VoiceURI.value =
-        voices.value.find(v => v.name.toLowerCase().includes('yaoyao'))?.voiceURI ||
-        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
-        voices.value[0]?.voiceURI;
-      // Speaker 2 默认 English Mark
-      speaker2VoiceURI.value =
         voices.value.find(v => v.name.toLowerCase().includes('mark'))?.voiceURI ||
         voices.value.find(v => 
           v.lang === 'en-US' ||
@@ -95,6 +93,11 @@ const populateVoiceList = () => {
           v.lang === 'en-NZ'
         )?.voiceURI ||
         voices.value[0]?.voiceURI;
+      // Speaker 2 默认 Chinese Yaoyao
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.name.toLowerCase().includes('yaoyao'))?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
     } else {
       // 其它浏览器，仅显示中文（不含粤语）、日语、英语
       voices.value = availableVoices.filter(voice =>
@@ -102,13 +105,15 @@ const populateVoiceList = () => {
         voice.lang.startsWith('ja') ||
         voice.lang.startsWith('en')
       );
+      // Speaker 1 默认 en-US
       speaker1VoiceURI.value =
-        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
-        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
-        voices.value[0]?.voiceURI;
-      speaker2VoiceURI.value =
         voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value[0]?.voiceURI;
+      // Speaker 2 默认台湾
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh'))?.voiceURI ||
         voices.value[0]?.voiceURI;
     }
   } else {
