@@ -8,6 +8,9 @@ const text = ref('');
 const voices = ref<SpeechSynthesisVoice[]>([]); 
 // 保存用户选择的语音URI
 const selectedVoiceURI = ref<string | null>(null); 
+// 保存 Speaker 1 和 Speaker 2 的语音选择
+const speaker1VoiceURI = ref<string | null>(null);
+const speaker2VoiceURI = ref<string | null>(null);
 // 保存错误信息
 const errorMessage = ref('');
 
@@ -18,13 +21,26 @@ const synth = window.speechSynthesis;
 const populateVoiceList = () => {
   const availableVoices = synth.getVoices();
   if (availableVoices.length > 0) {
-    // 只筛选 Microsoft 和 Google 的语音
-    voices.value = availableVoices.filter(voice => 
-      voice.name.includes('Microsoft') || voice.name.includes('Google')
+    // 只筛选中文、日语、英语语音，且不包含粤语（zh-HK）
+    voices.value = availableVoices.filter(voice =>
+      (
+        (voice.lang.startsWith('zh') && voice.lang !== 'zh-HK') ||
+        voice.lang.startsWith('ja') ||
+        voice.lang.startsWith('en')
+      )
     );
-    // 默认选择列表中的第一个语音
     if (voices.value.length > 0) {
       selectedVoiceURI.value = voices.value[0].voiceURI;
+      // Speaker 1 默认选择第一个台湾（zh-TW）语音，没有则选第一个中文
+      speaker1VoiceURI.value =
+        voices.value.find(v => v.lang === 'zh-TW')?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('zh') && v.lang !== 'zh-HK')?.voiceURI ||
+        voices.value[0].voiceURI;
+      // Speaker 2 默认选择美国英语 Mark 男声，没有则选第一个英文
+      speaker2VoiceURI.value =
+        voices.value.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('mark'))?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
+        voices.value[0].voiceURI;
     }
   } else {
     errorMessage.value = '您的浏览器不支持语音合成，或语音列表加载失败。';
@@ -80,7 +96,6 @@ const speak = async () => {
       // - Microsoft Kangkang Online (Natural) - Chinese (Simplified, PRC) (zh-CN) 男声
       // - Google 普通话（中国大陆）(zh-CN) 女声/男声
       // - Google 國語（臺灣）(zh-TW) 女声/男声
-      // - Google 粤语（香港）(zh-HK) 女声/男声
       //
       // 可选的英语语音（以 en 开头，实际内容取决于你的浏览器和系统）例如：
       // - Microsoft Aria Online (Natural) - English (United States) (en-US) 女声
@@ -94,32 +109,12 @@ const speak = async () => {
       // 你可以在下拉框中看到所有可用的语音选项（包括男声和女声）
 
       if (line.startsWith('Speaker 1:')) {
-        // 寻找中文语音，带有多重回退机制
-        voice =
-          // 优先：台湾女声
-          voices.value.find(v => v.lang === 'zh-TW' && (v.name.includes('女') || v.name.toLowerCase().includes('female'))) ||
-          // 回退1：任何台湾语音
-          voices.value.find(v => v.lang === 'zh-TW') ||
-          // 回退2：大陆女声
-          voices.value.find(v => v.lang === 'zh-CN' && (v.name.includes('女') || v.name.toLowerCase().includes('female'))) ||
-          // 回退3：任何大陆语音
-          voices.value.find(v => v.lang === 'zh-CN') ||
-          // 回退4：任何中文语音
-          voices.value.find(v => v.lang.startsWith('zh'));
+        // 使用下拉框选择的 Speaker 1 语音
+        voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
         utterText = line.replace(/^Speaker 1:\s*/, ''); // 去掉前缀，只朗读内容
       } else if (line.startsWith('Speaker 2:')) {
-        // 寻找英文语音，带有多重回退机制
-        voice =
-          // 优先：美国女声
-          voices.value.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('female')) ||
-          // 回退1：任何美国语音
-          voices.value.find(v => v.lang === 'en-US') ||
-          // 回退2：英国女声
-          voices.value.find(v => v.lang === 'en-GB' && v.name.toLowerCase().includes('female')) ||
-          // 回退3：任何英国语音
-          voices.value.find(v => v.lang === 'en-GB') ||
-          // 回退4：任何英文语音
-          voices.value.find(v => v.lang.startsWith('en'));
+        // 使用下拉框选择的 Speaker 2 语音
+        voice = voices.value.find(v => v.voiceURI === speaker2VoiceURI.value);
         utterText = line.replace(/^Speaker 2:\s*/, ''); // 去掉前缀，只朗读内容
       } else {
         // 其它情况：使用当前下拉框选择的语音
@@ -169,16 +164,22 @@ const speak = async () => {
 
     <main>
       <div class="control-group">
-        <label for="voice-select">请选择语音:</label>
-        <select id="voice-select" v-model="selectedVoiceURI" class="select-box">
+        <label for="speaker1-select">Speaker 1 语音:</label>
+        <select id="speaker1-select" v-model="speaker1VoiceURI" class="select-box">
           <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
             {{ voice.name }} ({{ voice.lang }})
           </option>
         </select>
-        <p v-if="voices.length === 0" class="info-text">
-          没有可用的语音。请使用 Edge 或 Chrome 浏览器尝试。
-        </p>
       </div>
+      <div class="control-group">
+        <label for="speaker2-select">Speaker 2 语音:</label>
+        <select id="speaker2-select" v-model="speaker2VoiceURI" class="select-box">
+          <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">
+            {{ voice.name }} ({{ voice.lang }})
+          </option>
+        </select>
+      </div>
+
 
       <div class="control-group">
         <label for="text-input">请输入文本:</label>
