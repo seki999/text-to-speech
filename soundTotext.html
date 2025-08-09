@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Speech 实时语音转文字（Edge/Chrome）</title>
+  <style>
+    :root {
+      --bg: #0f172a; /* slate-900 */
+      --panel: #111827cc; /* gray-900 with alpha */
+      --text: #e5e7eb; /* gray-200 */
+      --muted: #9ca3af; /* gray-400 */
+      --accent: #60a5fa; /* blue-400 */
+      --accent-2: #34d399; /* emerald-400 */
+      --danger: #f87171; /* red-400 */
+      --warn: #fbbf24; /* amber-400 */
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: radial-gradient(1200px 800px at 20% 0%, #0b1228, var(--bg));
+      color: var(--text); font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans CJK SC", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      display: grid; place-items: center;
+      padding: 24px;
+    }
+    .app {
+      width: min(1100px, 100%);
+      background: linear-gradient(180deg, #0b1228, #0b122880);
+      border: 1px solid #1f2937; border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+      overflow: hidden;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #1f2937; }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+    header .ua { font-size: 12px; color: var(--muted); }
+
+    .controls { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; padding: 16px 22px; background: #0b1228a6; border-bottom: 1px solid #1f2937; }
+    .controls .row { display: contents; }
+
+    .group { grid-column: span 3; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .group label { font-size: 12px; color: var(--muted); }
+    select, input[type="text"] {
+      width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #293241; background: #0b1228; color: var(--text);
+      outline: none; transition: border .15s ease;
+    }
+    select:focus, input[type="text"]:focus { border-color: var(--accent); }
+
+    .btnbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    button {
+      appearance: none; border: 1px solid #1f2937; background: #0b1228; color: var(--text);
+      padding: 10px 14px; border-radius: 999px; cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05); transition: transform .05s ease, border-color .2s, background .2s;
+    }
+    button:hover { border-color: #334155; }
+    button:active { transform: translateY(1px); }
+    .primary { background: linear-gradient(180deg, #1e3a8a, #1f2937); border-color: #1e3a8a; }
+    .success { border-color: #065f46; background: linear-gradient(180deg, #065f46, #1f2937); }
+    .danger { border-color: #7f1d1d; background: linear-gradient(180deg, #7f1d1d, #1f2937); }
+    .ghost { background: transparent; }
+    .pill { padding: 7px 12px; font-size: 12px; color: var(--muted); border-radius: 999px; border: 1px dashed #374151; }
+
+    .statusbar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; box-shadow: 0 0 0 3px rgba(71,85,105,.25) inset; }
+    .dot.live { background: var(--accent-2); box-shadow: 0 0 0 6px rgba(52, 211, 153, .15); }
+    .dot.err { background: var(--danger); box-shadow: 0 0 0 6px rgba(248, 113, 113, .15); }
+
+    main { display: grid; grid-template-columns: 1fr 320px; gap: 0; }
+    .transcript { padding: 18px 22px; min-height: 380px; }
+    .transcript .final { white-space: pre-wrap; word-break: break-word; font-size: 16px; }
+    .transcript .interim { opacity: .6; font-style: italic; }
+    .side { border-left: 1px solid #1f2937; padding: 18px 16px; background: #0b122850; display: flex; flex-direction: column; gap: 12px; }
+    .side h3 { margin: 2px 0 0; font-size: 14px; color: var(--muted); font-weight: 600; }
+    .kv { font-size: 13px; display: grid; grid-template-columns: 110px 1fr; gap: 6px 8px; }
+    .kv div { color: var(--muted); }
+    .kv b { color: var(--text); font-weight: 600; }
+
+    .footer { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 22px; border-top: 1px solid #1f2937; background: #0b1228a6; }
+    .error { color: var(--danger); font-size: 13px; }
+    .tips { color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .side { border-left: none; border-top: 1px solid #1f2937; }
+      .group { grid-column: span 6; }
+    }
+    @media (max-width: 600px) {
+      .group { grid-column: span 12; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🎙️ Web Speech 语音输入 → 实时转文字</h1>
+      <div class="ua" id="ua"></div>
+    </header>
+
+    <section class="controls">
+      <div class="group">
+        <label for="lang">识别语言</label>
+        <select id="lang">
+          <option value="zh-CN">中文（普通话）- zh-CN</option>
+          <option value="en-US">English (US) - en-US</option>
+          <option value="ja-JP">日本語 - ja-JP</option>
+          <option value="ko-KR">한국어 - ko-KR</option>
+          <option value="de-DE">Deutsch - de-DE</option>
+          <option value="fr-FR">Français - fr-FR</option>
+          <option value="es-ES">Español - es-ES</option>
+          <option value="it-IT">Italiano - it-IT</option>
+          <option value="ru-RU">Русский - ru-RU</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <label>模式</label>
+        <div class="btnbar">
+          <label class="pill"><input type="checkbox" id="continuous" checked> 连续识别</label>
+          <label class="pill"><input type="checkbox" id="interim" checked> 显示中间结果</label>
+          <label class="pill"><input type="checkbox" id="autorestart" checked> 自动重连</label>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>分段关键字（可选，遇到则换行）</label>
+        <input type="text" id="breakWords" placeholder="例如：句号。period, 逗号, カンマ" />
+      </div>
+
+      <div class="btnbar">
+        <button id="btnStart" class="primary">开始</button>
+        <button id="btnPause">暂停</button>
+        <button id="btnStop" class="danger">停止并清麦</button>
+        <button id="btnCopy" class="ghost">复制文本</button>
+        <button id="btnSave" class="ghost">导出 .txt</button>
+        <span class="statusbar">
+          <span id="dot" class="dot" title="状态指示"></span>
+          <span id="status">空闲</span>
+        </span>
+      </div>
+    </section>
+
+    <main>
+      <div class="transcript">
+        <div id="final" class="final"></div>
+        <div id="interim" class="interim"></div>
+      </div>
+      <aside class="side">
+        <h3>运行信息</h3>
+        <div class="kv">
+          <div>引擎</div><b id="engine">—</b>
+          <div>是否支持</div><b id="supported">—</b>
+          <div>连续识别</div><b id="kvContinuous">—</b>
+          <div>中间结果</div><b id="kvInterim">—</b>
+          <div>语言</div><b id="kvLang">—</b>
+          <div>上次错误</div><b id="lastErr">—</b>
+        </div>
+        <h3>提示</h3>
+        <ul class="tips">
+          <li>Chrome 会使用 Google 识别；Edge 会使用 Microsoft 识别（两者均走 Web Speech API）。</li>
+          <li>初次使用会弹出麦克风权限提示；必须允许才能识别。</li>
+          <li>若长时间无声，部分浏览器会自动停止；勾选“自动重连”可自动继续。</li>
+          <li>此示例在 Chrome/Edge 桌面端最佳；Safari/Firefox 未原生支持 SpeechRecognition。</li>
+        </ul>
+      </aside>
+    </main>
+
+    <div class="footer">
+      <div class="error" id="err"></div>
+      <div class="tips">开源示例，仅做演示用途。</div>
+    </div>
+  </div>
+
+  <script>
+    // --- 环境与兼容性 ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+
+    const els = {
+      ua: document.getElementById('ua'),
+      engine: document.getElementById('engine'),
+      supported: document.getElementById('supported'),
+      kvContinuous: document.getElementById('kvContinuous'),
+      kvInterim: document.getElementById('kvInterim'),
+      kvLang: document.getElementById('kvLang'),
+      lastErr: document.getElementById('lastErr'),
+      status: document.getElementById('status'),
+      dot: document.getElementById('dot'),
+      final: document.getElementById('final'),
+      interim: document.getElementById('interim'),
+      err: document.getElementById('err'),
+      lang: document.getElementById('lang'),
+      continuous: document.getElementById('continuous'),
+      interimChk: document.getElementById('interim'), // note: id clash; we keep reference separately for text div
+      interimFlag: document.getElementById('interim'),
+      breakWords: document.getElementById('breakWords'),
+      btnStart: document.getElementById('btnStart'),
+      btnPause: document.getElementById('btnPause'),
+      btnStop: document.getElementById('btnStop'),
+      btnCopy: document.getElementById('btnCopy'),
+      btnSave: document.getElementById('btnSave'),
+    };
+    els.ua.textContent = navigator.userAgent;
+
+    // 解决与 transcript .interim 的 ID 冲突（上面误用）
+    const interimDiv = document.querySelector('.interim');
+    const interimCheckbox = document.querySelector('input#interim');
+
+    function detectEngine() {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('edg/')) return 'Microsoft (Edge)';
+      if (ua.includes('chrome/')) return 'Google (Chrome)';
+      if (ua.includes('opera') || ua.includes('opr/')) return 'Google (Opera)';
+      return '未知/其他';
+    }
+
+    els.engine.textContent = detectEngine();
+    els.supported.textContent = recognition ? '✅ 支持' : '❌ 不支持';
+
+    if (!recognition) {
+      els.err.textContent = '当前浏览器未提供 Web Speech API 的 SpeechRecognition。请在最新的 Chrome 或 Edge 中打开此页面。';
+      // 禁用控件
+      for (const id of ['btnStart','btnPause','btnStop','btnCopy','btnSave']) {
+        const el = document.getElementById(id); if (el) el.disabled = true;
+      }
+    }
+
+    // --- 配置 ---
+    let autoRestart = true;
+    let recognizing = false;
+    let finalTranscript = '';
+
+    function refreshKV() {
+      els.kvContinuous.textContent = recognition ? (recognition.continuous ? '是' : '否') : '—';
+      els.kvInterim.textContent = recognition ? (recognition.interimResults ? '是' : '否') : '—';
+      els.kvLang.textContent = recognition ? recognition.lang : '—';
+    }
+
+    function setStatus(text, mode = 'idle') {
+      els.status.textContent = text;
+      els.dot.classList.remove('live','err');
+      if (mode === 'live') els.dot.classList.add('live');
+      if (mode === 'err') els.dot.classList.add('err');
+    }
+
+    function appendFinal(text) {
+      finalTranscript += text;
+      const breaks = (document.getElementById('breakWords').value || '')
+        .split(/[,，、\s]+/).filter(Boolean);
+      if (breaks.length) {
+        const hit = breaks.some(w => text.includes(w));
+        if (hit) finalTranscript += '\n';
+      }
+      els.final.textContent = finalTranscript;
+    }
+
+    function copyText() {
+      const all = els.final.textContent.trim();
+      if (!all) return;
+      navigator.clipboard.writeText(all).then(() => {
+        setStatus('已复制到剪贴板', 'idle');
+      });
+    }
+
+    function saveText() {
+      const blob = new Blob([els.final.textContent], {type: 'text/plain;charset=utf-8'});
+      const a = document.createElement('a');
+      const date = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = URL.createObjectURL(blob);
+      a.download = `speech-to-text-${date}.txt`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    }
+
+    if (recognition) {
+      // 初始设置
+      recognition.lang = document.getElementById('lang').value;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      refreshKV();
+
+      // 事件绑定
+      recognition.onstart = () => {
+        recognizing = true;
+        setStatus('正在聆听… 请开始说话', 'live');
+        els.err.textContent = '';
+      };
+      recognition.onend = () => {
+        recognizing = false;
+        setStatus('已停止');
+        // 自动重连
+        if (autoRestart) {
+          setStatus('连接已结束，准备自动重连…');
+          setTimeout(() => {
+            if (!recognizing) try { recognition.start(); } catch (_) {}
+          }, 400);
+        }
+      };
+      recognition.onerror = (event) => {
+        const { error } = event;
+        let msg = '';
+        switch (error) {
+          case 'no-speech': msg = '未检测到语音（no-speech）。请检查麦克风或提高音量。'; break;
+          case 'audio-capture': msg = '无法访问麦克风（audio-capture）。请确认设备与权限。'; break;
+          case 'not-allowed': msg = '权限被拒绝（not-allowed）。请在地址栏右侧检查网站麦克风权限设置。'; break;
+          case 'aborted': msg = '识别被中止（aborted）。'; break;
+          case 'network': msg = '网络错误（network）。'; break;
+          case 'service-not-allowed': msg = '服务不可用或被禁用（service-not-allowed）。'; break;
+          default: msg = `未知错误：${error}`;
+        }
+        els.err.textContent = msg;
+        els.lastErr.textContent = error;
+        setStatus('发生错误', 'err');
+      };
+      recognition.onresult = (event) => {
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const result = event.results[i];
+          const transcript = result[0].transcript;
+          if (result.isFinal) {
+            appendFinal(transcript);
+          } else {
+            interimText += transcript;
+          }
+        }
+        interimDiv.textContent = interimCheckbox.checked ? interimText : '';
+      };
+
+      // 控件交互
+      document.getElementById('lang').addEventListener('change', (e) => {
+        recognition.lang = e.target.value; refreshKV();
+      });
+      document.getElementById('continuous').addEventListener('change', (e) => {
+        recognition.continuous = e.target.checked; refreshKV();
+      });
+      interimCheckbox.addEventListener('change', (e) => {
+        recognition.interimResults = e.target.checked; refreshKV();
+      });
+      document.getElementById('autorestart').addEventListener('change', (e) => {
+        autoRestart = e.target.checked;
+      });
+
+      document.getElementById('btnStart').addEventListener('click', () => {
+        autoRestart = document.getElementById('autorestart').checked;
+        try { recognition.start(); } catch (err) { /* already started */ }
+      });
+      document.getElementById('btnPause').addEventListener('click', () => {
+        // Web Speech API 没有 pause；这里通过临时关闭自动重连 + stop 模拟“暂停”
+        const prev = autoRestart; autoRestart = false;
+        recognition.stop();
+        setTimeout(() => { autoRestart = prev; }, 100);
+      });
+      document.getElementById('btnStop').addEventListener('click', () => {
+        autoRestart = false; recognition.stop(); setStatus('已停止');
+      });
+      document.getElementById('btnCopy').addEventListener('click', copyText);
+      document.getElementById('btnSave').addEventListener('click', saveText);
+
+      // 小优化：页面隐藏时不自动重连，返回时再续
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          autoRestart = false; if (recognizing) recognition.stop();
+        } else {
+          autoRestart = document.getElementById('autorestart').checked;
+        }
+      });
+    }
+  </script>
+</body>
+</html>
