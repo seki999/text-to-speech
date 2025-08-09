@@ -39,9 +39,9 @@ const populateVoiceList = () => {
           voice.lang.startsWith('en')
         )
       );
-      // Speaker 1 默认 en-US
+      // Speaker 1 默认 English Emma
       speaker1VoiceURI.value =
-        voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
+        voices.value.find(v => v.name.toLowerCase().includes('emma'))?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
       // Speaker 2 默认台湾
@@ -82,16 +82,10 @@ const populateVoiceList = () => {
         return langOrder(a.lang) - langOrder(b.lang);
       });
       voices.value = msVoices;
-      // Speaker 1 默认 English Mark
+      // Speaker 1 默认 English Emma
       speaker1VoiceURI.value =
-        voices.value.find(v => v.name.toLowerCase().includes('mark'))?.voiceURI ||
-        voices.value.find(v => 
-          v.lang === 'en-US' ||
-          v.lang === 'en-GB' ||
-          v.lang === 'en-AU' ||
-          v.lang === 'en-CA' ||
-          v.lang === 'en-NZ'
-        )?.voiceURI ||
+        voices.value.find(v => v.name.toLowerCase().includes('emma'))?.voiceURI ||
+        voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
       // Speaker 2 默认 Chinese Yaoyao
       speaker2VoiceURI.value =
@@ -105,9 +99,9 @@ const populateVoiceList = () => {
         voice.lang.startsWith('ja') ||
         voice.lang.startsWith('en')
       );
-      // Speaker 1 默认 en-US
+      // Speaker 1 默认 English Emma
       speaker1VoiceURI.value =
-        voices.value.find(v => v.lang === 'en-US')?.voiceURI ||
+        voices.value.find(v => v.name.toLowerCase().includes('emma'))?.voiceURI ||
         voices.value.find(v => v.lang.startsWith('en'))?.voiceURI ||
         voices.value[0]?.voiceURI;
       // Speaker 2 默认台湾
@@ -149,7 +143,14 @@ watch(voices, (newVoices) => {
 watch(speaker1Lang, (newLang) => {
   const filtered = filteredVoicesByLang(newLang);
   if (filtered.length > 0) {
-    speaker1VoiceURI.value = filtered[0].voiceURI;
+    if (newLang === 'en') {
+      // 如果是英语，优先选择 'Emma'
+      const emmaVoice = filtered.find(v => v.name.toLowerCase().includes('emma'));
+      speaker1VoiceURI.value = emmaVoice ? emmaVoice.voiceURI : filtered[0].voiceURI;
+    } else {
+      // 其它语言选择第一个
+      speaker1VoiceURI.value = filtered[0].voiceURI;
+    }
   }
 });
 
@@ -157,7 +158,14 @@ watch(speaker1Lang, (newLang) => {
 watch(speaker2Lang, (newLang) => {
   const filtered = filteredVoicesByLang(newLang);
   if (filtered.length > 0) {
-    speaker2VoiceURI.value = filtered[0].voiceURI;
+    if (newLang === 'en') {
+      // 如果是英语，优先选择 'Emma'
+      const emmaVoice = filtered.find(v => v.name.toLowerCase().includes('emma'));
+      speaker2VoiceURI.value = emmaVoice ? emmaVoice.voiceURI : filtered[0].voiceURI;
+    } else {
+      // 其它语言选择第一个
+      speaker2VoiceURI.value = filtered[0].voiceURI;
+    }
   }
 });
 
@@ -380,6 +388,17 @@ header p {
   color: #555;
 }
 
+.control-group:has(.voice-select-row) {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.control-group:has(.voice-select-row) > label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
 .select-box,
 .text-area {
   width: 100%;
@@ -448,6 +467,7 @@ header p {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-grow: 1;
 }
 .short-select {
   width: 7rem;
