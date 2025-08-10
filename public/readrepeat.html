@@ -19,7 +19,13 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; background: radial-gradient(1200px 600px at 20% -10%, #1a2345, #0b1020); color: var(--text); }
-    .container { max-width: 1200px; margin: 32px auto; padding: 0 16px; }
+    .container {
+    /* 原: max-width: 1200px; */
+    max-width: 95%;
+    width: 95%;
+    margin: 32px auto;
+    padding: 0 16px;
+  }
     header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 16px; }
     header h1 { font-size: clamp(18px, 2.2vw, 28px); margin: 0; letter-spacing: 0.5px; }
 
@@ -66,6 +72,28 @@
 
     .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding: 2px 6px; font-size: 12px; }
     .small { font-size: 12px; color: var(--muted); }
+
+    /* 让“加载朗读语言模型”下拉框（voiceSelect）更醒目 */
+    #voiceSelect {
+      background: linear-gradient(145deg,#20325f,#1a2747);
+      border: 2px solid #5b8cff;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 12px 16px;
+      box-shadow: 0 0 0 3px rgba(91,140,255,.25);
+    }
+    #voiceSelect:focus {
+      border-color: #82aaff;
+      box-shadow: 0 0 0 4px rgba(130,170,255,.35);
+    }
+    /* 选项文字更清晰 */
+    #voiceSelect option {
+      background:#1b2542;
+      color:#fff;
+      font-size:15px;
+      font-weight:500;
+    }
 
     @media (max-width: 900px){
       .grid { grid-template-columns: 1fr; }
@@ -183,34 +211,44 @@
     const voiceSelect = qs('#voiceSelect');
 
     function populateVoices() {
-      voices = synth.getVoices().filter(v => /en/i.test(v.lang));
+      const allowed = ['en-US','en-GB','en-AU','en-CA'];
+      voices = synth.getVoices()
+        .filter(v => allowed.includes(v.lang))
+        .sort((a,b) => allowed.indexOf(a.lang) - allowed.indexOf(b.lang));
+
       voiceSelect.innerHTML = '';
       if (voices.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = '（未检测到英语语音，稍后再试）';
+        opt.textContent = '（未检测到所需英语语音，稍后再试）';
         voiceSelect.appendChild(opt);
         return;
       }
-      voices.forEach((v, idx) => {
+      voices.forEach((v) => {
         const opt = document.createElement('option');
         opt.value = v.voiceURI;
         opt.textContent = `${v.name} — ${v.lang}${v.default ? ' (默认)' : ''}`;
-        if (v.default && voiceSelect.selectedIndex === -1) opt.selected = true;
         voiceSelect.appendChild(opt);
       });
-      if (voiceSelect.selectedIndex === -1 && voices[0]) voiceSelect.value = voices[0].voiceURI;
+
+      // 优先：Emma (en-US) -> 其余 en-US -> en-GB -> en-AU -> en-CA
+      const firstAvailable =
+          voices.find(v => v.lang === 'en-US' && /emma/i.test(v.name)) ||
+          voices.find(v => v.lang === 'en-US') ||
+          voices.find(v => v.lang === 'en-GB') ||
+          voices.find(v => v.lang === 'en-AU') ||
+          voices.find(v => v.lang === 'en-CA');
+      if (firstAvailable) voiceSelect.value = firstAvailable.voiceURI;
     }
 
     populateVoices();
     if (typeof speechSynthesis !== 'undefined') {
       speechSynthesis.onvoiceschanged = () => {
-        // 某些浏览器会多次触发，去抖
-        const prev = voiceSelect.options.length;
+        const prev = voiceSelect.value;
         populateVoices();
-        // 若之前已经选择过，尽量保持
-        if (prev && selectedVoiceURI && qsa('#voiceSelect option').some(o=>o.value===selectedVoiceURI)) {
-          voiceSelect.value = selectedVoiceURI;
+        // 如果之前选中的仍存在则保持，否则已按 Emma 优先重新设定
+        if (voices.some(v => v.voiceURI === prev)) {
+          voiceSelect.value = prev;
         }
       };
     }
