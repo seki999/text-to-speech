@@ -56,7 +56,7 @@ h1{margin:0 0 .5rem;font-size:1.7rem;}
       <div class="voice-select-row">
         <select id="speaker2Lang" class="short-select">
           <option value="en">英语</option>
-          <option value="zh">汉语</option>
+          <option value="zh" selected>汉语</option> <!-- 预设为汉语 -->
           <option value="ja">日语</option>
         </select>
         <select id="speaker2Voice" class="select-box"></select>
@@ -102,6 +102,19 @@ const synth = window.speechSynthesis;
 let voices = [];
 let cancelRequested = false;
 let currentLineIndex = -1;
+let speaker2Initialized = false;
+/* 新增：记录用户是否主动改过语言，下次刷新不再覆盖 */
+let userPickedSpeaker1Lang = false;
+let userPickedSpeaker2Lang = false;
+
+/* 默认语音名称 */
+const defaultSpeaker2VoiceName = 'Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)';
+let speaker2DefaultApplied = false;
+
+/* 新增：英语默认语音设置 */
+const defaultEnglishVoiceName = 'Microsoft EmmaMultilingual Online (Natural) - English (United States)';
+let speaker1EnglishDefaultApplied = false;
+let speaker2EnglishDefaultApplied = false;
 
 /* 初始文本示例 */
 textEl.value = ``;
@@ -132,7 +145,46 @@ function getLines(){
 
 /* 语音过滤 */
 function populateVoiceSelect(selectEl, langPrefix){
-  const filtered = voices.filter(v => v.lang.toLowerCase().startsWith(langPrefix.toLowerCase()));
+  const prevValue = selectEl.value;
+  const lp = langPrefix.toLowerCase();
+  const allowedEnRegions = ['en-us','en-au','en-ca','en-gb']; // 仅保留这些
+
+  let filtered = voices.filter(v => {
+    const lang = v.lang.toLowerCase();
+    if (!lang.startsWith(lp)) return false;
+
+    if (lp === 'en') {
+      if (!allowedEnRegions.some(r => lang.startsWith(r))) return false;
+    } else if (lp === 'zh') {
+      if (lang.includes('hk')) return false;
+      if (/xiaoni/i.test(v.name)) return false;
+    }
+    return true;
+  });
+
+  // 英语排序顺序: 美国 > 澳大利亚 > 加拿大 > 英国
+  if (lp === 'en') {
+    const order = ['en-us','en-au','en-ca','en-gb'];
+    filtered.sort((a,b)=>{
+      const al = a.lang.toLowerCase();
+      const bl = b.lang.toLowerCase();
+      const ai = order.findIndex(p => al.startsWith(p));
+      const bi = order.findIndex(p => bl.startsWith(p));
+      if (ai !== bi) return ai - bi;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  // 中文优先 Xiaoxiao
+  if (lp === 'zh') {
+    filtered.sort((a,b)=>{
+      const ax = /xiaoxiao/i.test(a.name) ? 0 : 1;
+      const bx = /xiaoxiao/i.test(b.name) ? 0 : 1;
+      if (ax !== bx) return ax - bx;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
   selectEl.innerHTML = '';
   filtered.forEach(v=>{
     const opt = document.createElement('option');
@@ -140,27 +192,99 @@ function populateVoiceSelect(selectEl, langPrefix){
     opt.textContent = `${v.name} (${v.lang})`;
     selectEl.appendChild(opt);
   });
+
   if(filtered.length === 0){
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = '无可用语音';
     selectEl.appendChild(opt);
+  } else {
+    if (filtered.some(v => v.voiceURI === prevValue)) {
+      selectEl.value = prevValue;
+    } else {
+      selectEl.value = filtered[0].voiceURI;
+    }
   }
-  // 默认选第一个
-  if(filtered.length > 0) selectEl.value = filtered[0].voiceURI;
+}
+
+/* 新增：应用英语默认语音 */
+function applyEnglishDefault(selectEl, which){
+  if(selectEl.options.length === 0) return;
+  if(which === 's1' && speaker1EnglishDefaultApplied) return;
+  if(which === 's2' && speaker2EnglishDefaultApplied) return;
+  const opts = Array.from(selectEl.options);
+  let target = opts.find(o => o.text.startsWith(defaultEnglishVoiceName));
+  if(!target){
+    target = opts.find(o => /EmmaMultilingual/i.test(o.text) && /English \(United States\)/i.test(o.text));
+  }
+  if(target){
+    selectEl.value = target.value;
+    if(which === 's1') speaker1EnglishDefaultApplied = true;
+    else speaker2EnglishDefaultApplied = true;
+    console.log(`[${which}] 英语默认已设为: ${target.text}`);
+  } else {
+    console.log(`[${which}] 未找到默认 EmmaMultilingual 英语语音，保持当前第一项。`);
+  }
+}
+
+function applySpeaker2DefaultIfNeeded(){
+  if (speaker2DefaultApplied) return;
+  // 仅当中文
+  if (speaker2LangEl.value !== 'zh') return;
+
+  // 当前下拉里的 option 集合
+  const opts = Array.from(speaker2VoiceEl.options);
+  if (opts.length === 0 || (opts.length === 1 && opts[0].value === '')) return; // 空列表
+
+  // 优先精确匹配完整名称
+  let target = opts.find(o => o.text.startsWith(defaultSpeaker2VoiceName));
+  // 退而求其次匹配名称里含 Xiaoxiao
+  if (!target) target = opts.find(o => /xiaoxiao/i.test(o.text));
+  if (target) {
+    speaker2VoiceEl.value = target.value;
+    speaker2DefaultApplied = true;
+    console.log('[Speaker2] 已设为默认:', target.text);
+  } else {
+    console.log('[Speaker2] 未找到 Xiaoxiao，等待下一次 voiceschanged 再尝试。');
+  }
 }
 
 function loadVoices(){
   voices = synth.getVoices();
+  console.log('========== 全部语音列表 ==========');
+  voices.forEach((v,i)=>{
+    console.log(
+      `${i}. name: ${v.name} | lang: ${v.lang} | default: ${v.default} | localService: ${v.localService} | uri: ${v.voiceURI}`
+    );
+  });
+  console.log('总数:', voices.length);
+
   populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value);
+  if(speaker1LangEl.value === 'en') applyEnglishDefault(speaker1VoiceEl,'s1');
+
+  // 若用户未手动改过，确保 Speaker2 语言保持 zh
+  if(!userPickedSpeaker2Lang) speaker2LangEl.value = 'zh';
   populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value);
+
+  if(speaker2LangEl.value === 'en') applyEnglishDefault(speaker2VoiceEl,'s2');
+  if(speaker2LangEl.value === 'zh') applySpeaker2DefaultIfNeeded();
 }
+
 synth.onvoiceschanged = loadVoices;
 loadVoices();
 
-/* 监听语言选择变化 */
-speaker1LangEl.addEventListener('change', ()=>populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value));
-speaker2LangEl.addEventListener('change', ()=>populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value));
+/* 修改语言下拉事件：标记用户已主动选择，保持当前选项 */
+speaker1LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker1Lang = true;
+  populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value);
+  if(speaker1LangEl.value === 'en') applyEnglishDefault(speaker1VoiceEl,'s1');
+});
+speaker2LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker2Lang = true;
+  populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value);
+  if(speaker2LangEl.value === 'zh') applySpeaker2DefaultIfNeeded();
+  if(speaker2LangEl.value === 'en') applyEnglishDefault(speaker2VoiceEl,'s2');
+});
 
 /* 文本变化更新预览 */
 textEl.addEventListener('input', renderPreview);
@@ -183,9 +307,11 @@ function parseLine(raw){
   let voice = null;
   if(raw.startsWith('Speaker 1:')){
     utterText = raw.replace(/^Speaker 1:\s*/,'');
+
     voice = voices.find(v=>v.voiceURI === speaker1VoiceEl.value);
   }else if(raw.startsWith('Speaker 2:')){
     utterText = raw.replace(/^Speaker 2:\s*/,'');
+
     voice = voices.find(v=>v.voiceURI === speaker2VoiceEl.value);
   }else{
     voice = voices.find(v=>v.voiceURI === speaker1VoiceEl.value);
