@@ -24,9 +24,10 @@ h1{margin:0 0 .5rem;font-size:1.7rem;}
   border:1px solid #d8e4f5;
   border-radius:10px;
   padding:1rem;
-  overflow:hidden;          /* 初始不出现滚动条，如需滚动可改为 auto */
   line-height:1.4;
-  transition:height .2s;
+  transition:height .18s;
+  overflow:hidden;          /* 小文本不显示滚动条 */
+  max-width:100%;
 }
 .read-line{padding:.25rem .55rem;border-radius:6px;font-size:1.25em;transition:background .2s,color .2s;}
 .read-line.active{background:#ffe082;color:#e53935;font-weight:700;font-size:1.45em;}
@@ -210,30 +211,27 @@ function setError(msg){ errorBox.textContent = msg || ''; }
 function renderPreview(){
   const lines = getLines();
   linesPreview.innerHTML = '';
+  const frag = document.createDocumentFragment();
   lines.forEach((line, idx)=>{
     const div = document.createElement('div');
     div.className = 'read-line' + (idx === currentLineIndex ? ' active':'' );
     div.textContent = line;
-    linesPreview.appendChild(div);
+    frag.appendChild(div);
   });
+  linesPreview.appendChild(frag);
 
-  // 动态高度计算
-  // 基准行高（含上下内边距裕量）
-  const baseLineHeight = 28; // px，若字体改动可微调
-  const maxVisibleLines = 60; // 安全上限，避免文本极长时页面过长
-  const lineCount = lines.length || 1;
-  const visibleLines = Math.min(lineCount, maxVisibleLines);
-
-  // 外层 padding 已有，按行数设定高度
-  const targetHeight = visibleLines * baseLineHeight;
-  linesPreview.style.height = targetHeight + 'px';
-
-  // 如果行数超过上限，允许滚动
-  if(lineCount > maxVisibleLines){
-    linesPreview.style.overflow = 'auto';
-  }else{
-    linesPreview.style.overflow = 'hidden';
-  }
+  // 允许根据内容自动增长，超过阈值再出现滚动
+  requestAnimationFrame(()=>{
+    const fullHeight = linesPreview.scrollHeight; // 内容真实高度
+    const maxHeight = 1600;  // 自定义一个上限（像素），可按需要调整或放大
+    if(fullHeight <= maxHeight){
+      linesPreview.style.height = fullHeight + 'px';
+      linesPreview.style.overflow = 'hidden';
+    }else{
+      linesPreview.style.height = maxHeight + 'px';
+      linesPreview.style.overflow = 'auto';
+    }
+  });
 }
 function updateActiveLine(idx){
   currentLineIndex = idx;
