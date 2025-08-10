@@ -443,7 +443,7 @@ const readAloud = async () => {
 </template>
 
 <style>
-/* 应用整体样式 */
+/* 调整：减少左侧余白 */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: #f0f2f5;
@@ -451,25 +451,26 @@ body {
   min-height: 100vh;
   margin: 0;
   display: flex;
-  justify-content: center;
-  align-items: flex-start; /* 顶部对齐，如果想垂直居中可用center */
+  justify-content: flex-start; /* 原 center -> 左对齐，去掉左侧空白 */
+  align-items: flex-start;
 }
 
 .app-container {
   background-color: #ffffff;
-  padding: 2rem 3rem;
+  padding: 2rem 2rem 2rem 1.5rem; /* 左内边距略减小 (原 2rem 3rem) */
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  width: 135vw;
-  max-width: 1800px;
+  width: 1200px;              /* 避免 135vw 造成左右留白/滚动，可按需再调 */
+  max-width: 95vw;
   min-width: 600px;
-  margin: 0 auto;         /* 水平居中 */
-  /* 移除 margin-top/margin-left/margin-right */
+  margin: 0 0 0 0.5rem;        /* 靠左，仅保留很小间距 */
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 
+/* 如果仍觉得左边多，可再把 margin-left 改成 0，或把 padding-left 再减小 */
 header {
   text-align: center;
   margin-bottom: 2rem;
