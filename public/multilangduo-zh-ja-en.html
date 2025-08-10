@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-v-app>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>文本转语音应用</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}
+body{margin:0;background:#f0f2f5;color:#222;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:12px;}
+.app-container{background:#fff;width:95%;max-width:1800px;min-width:600px;margin:0 auto;padding:1.8rem 2rem;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:1.4rem;}
+h1{margin:0 0 .5rem;font-size:1.7rem;}
+.control-group{display:flex;flex-direction:column;gap:.5rem;}
+.voice-select-row{display:flex;gap:.6rem;flex-wrap:wrap;}
+.select-box,.short-select{padding:.55rem .75rem;border:2px solid #5b8cff;border-radius:8px;background:#132342;color:#fff;font-weight:600;min-width:160px;}
+.select-box option{background:#1c2f55;color:#fff;}
+.short-select{max-width:110px;}
+.text-area{width:100%;padding:.9rem 1rem;border:1px solid #bbb;border-radius:10px;font-size:1rem;min-height:36rem;resize:vertical;line-height:1.5;}
+.action-buttons{display:flex;gap:1rem;width:100%;flex-wrap:wrap;}
+.action-button{flex:1;min-width:180px;background:#1976d2;color:#fff;border:none;padding:.9rem 1.2rem;font-size:1.05rem;border-radius:8px;cursor:pointer;font-weight:600;letter-spacing:.5px;transition:.18s;}
+.action-button:hover{background:#125da6;}
+.action-button:disabled{background:#9e9e9e;cursor:not-allowed;}
+.read-lines-preview{background:#f7fafd;border:1px solid #d8e4f5;border-radius:10px;padding:1rem;max-height:320px;overflow:auto;line-height:1.4;}
+.read-line{padding:.25rem .55rem;border-radius:6px;font-size:1.25em;transition:background .2s,color .2s;}
+.read-line.active{background:#ffe082;color:#e53935;font-weight:700;font-size:1.45em;}
+.error-message{color:#d32f2f;font-weight:600;}
+.footer-hint{font-size:.78rem;color:#666;margin-top:.5rem;}
+::-webkit-scrollbar{width:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#b5c5dd;border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:#94aac7;}
+</style>
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <h1>文本转语音应用</h1>
+      <div class="footer-hint">提示：生成语音并下载 时请选择“此标签页”并勾选“分享此标签页音频 / Share tab audio”。某些浏览器可能无法录制合成语音。</div>
+    </header>
+
+    <!-- Speaker 1 -->
+    <div class="control-group">
+      <label>Speaker 1 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker1Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh" selected>汉语</option>
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker1Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 2 -->
+    <div class="control-group">
+      <label>Speaker 2 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker2Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh" selected>汉语</option> <!-- 预设为汉语 -->
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker2Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 3 -->
+    <div class="control-group">
+      <label>Speaker 3 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker3Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja" selected>日语</option>
+        </select>
+        <select id="speaker3Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 4 -->
+    <div class="control-group">
+      <label>Speaker 4 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker4Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja" selected>日语</option>
+        </select>
+        <select id="speaker4Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 5 -->
+    <div class="control-group">
+      <label>Speaker 5 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker5Lang" class="short-select">
+          <option value="en" selected>英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker5Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 6 -->
+    <div class="control-group">
+      <label>Speaker 6 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker6Lang" class="short-select">
+          <option value="en" selected>英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker6Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- 文本输入 -->
+    <div class="control-group">
+      <label for="textInput">请输入文本 (可用 Speaker 1:/Speaker 2: 前缀分配不同语音):</label>
+      <textarea id="textInput" class="text-area"></textarea>
+    </div>
+
+    <!-- 按钮 -->
+    <div class="action-buttons">
+      <button id="btnRead" class="action-button">朗读</button>
+      <button id="btnSpeakDownload" class="action-button">生成语音并下载 (WAV)</button>
+      <button id="btnCancel" class="action-button" disabled>取消朗读</button>
+    </div>
+
+    <!-- 当前行预览 -->
+    <div class="control-group">
+      <label>朗读预览 (自动高亮当前行):</label>
+      <div id="linesPreview" class="read-lines-preview"></div>
+    </div>
+
+    <div id="errorBox" class="error-message"></div>
+  </div>
+
+<script>
+/* 状态 */
+const textEl = document.getElementById('textInput');
+const speaker1LangEl = document.getElementById('speaker1Lang');
+const speaker2LangEl = document.getElementById('speaker2Lang');
+const speaker3LangEl = document.getElementById('speaker3Lang');
+const speaker4LangEl = document.getElementById('speaker4Lang');
+const speaker5LangEl = document.getElementById('speaker5Lang');
+const speaker6LangEl = document.getElementById('speaker6Lang');
+const speaker1VoiceEl = document.getElementById('speaker1Voice');
+const speaker2VoiceEl = document.getElementById('speaker2Voice');
+const speaker3VoiceEl = document.getElementById('speaker3Voice');
+const speaker4VoiceEl = document.getElementById('speaker4Voice');
+const speaker5VoiceEl = document.getElementById('speaker5Voice');
+const speaker6VoiceEl = document.getElementById('speaker6Voice');
+const btnRead = document.getElementById('btnRead');
+const btnSpeakDownload = document.getElementById('btnSpeakDownload');
+const btnCancel = document.getElementById('btnCancel');
+const linesPreview = document.getElementById('linesPreview');
+const errorBox = document.getElementById('errorBox');
+
+const synth = window.speechSynthesis;
+let voices = [];
+let cancelRequested = false;
+let currentLineIndex = -1;
+let speaker2Initialized = false;
+/* 新增：记录用户是否主动改过语言，下次刷新不再覆盖 */
+let userPickedSpeaker1Lang = false;
+let userPickedSpeaker2Lang = false;
+let userPickedSpeaker3Lang = false;
+let userPickedSpeaker4Lang = false;
+let userPickedSpeaker5Lang = false;
+let userPickedSpeaker6Lang = false;
+
+/* 默认语音名称 */
+const defaultSpeaker1VoiceName = 'Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)'; // Speaker1 保持 Xiaoxiao
+const defaultSpeaker2VoiceName = 'Microsoft Yunxi Online (Natural) - Chinese (Mainland)';    // Speaker2 改为 Yunxi
+let speaker1DefaultApplied = false; // 当前通过排序已是 Xiaoxiao，可备用
+let speaker2DefaultApplied = false;
+
+/* 新增：英语默认语音设置 */
+const defaultEnglishVoiceName = 'Microsoft EmmaMultilingual Online (Natural) - English (United States)';
+const defaultSpeaker5EnglishVoiceName = 'Microsoft EmmaMultilingual Online (Natural) - English (United States)';
+const defaultSpeaker6EnglishVoiceName = 'Microsoft Christopher Online (Natural) - English (United States)';
+let speaker1EnglishDefaultApplied = false;
+let speaker2EnglishDefaultApplied = false;
+let speaker5EnglishDefaultApplied = false;
+let speaker6EnglishDefaultApplied = false;
+
+/* ==== 新增：Speaker 3 / 4 日语默认语音配置 ==== */
+const defaultSpeaker3VoiceName = 'Microsoft Nanami Online (Natural) - Japanese (Japan)';
+const defaultSpeaker4VoiceName = 'Microsoft Keita Online (Natural) - Japanese (Japan)';
+let speaker3DefaultApplied = false;
+let speaker4DefaultApplied = false;
+
+/* 初始文本示例 */
+textEl.value = ``;
+
+/* 工具函数 */
+function setError(msg){ errorBox.textContent = msg || ''; }
+
+/* 渲染预览行 */
+function renderPreview(){
+  const lines = getLines();
+  linesPreview.innerHTML = '';
+  lines.forEach((line, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'read-line' + (idx === currentLineIndex ? ' active':'');
+    div.textContent = line;
+    linesPreview.appendChild(div);
+  });
+}
+function updateActiveLine(idx){
+  currentLineIndex = idx;
+  Array.from(linesPreview.children).forEach((el,i)=>{
+    el.classList.toggle('active', i === idx);
+  });
+}
+function getLines(){
+  return textEl.value.split('\n').map(l=>l.trimEnd()).filter(l=>l.trim() !== '');
+}
+
+/* 语音过滤 */
+function populateVoiceSelect(selectEl, langPrefix){
+  const prevValue = selectEl.value;
+  const lp = langPrefix.toLowerCase();
+  const allowedEnRegions = ['en-us','en-au','en-ca','en-gb']; // 仅保留这些
+
+  let filtered = voices.filter(v => {
+    const lang = v.lang.toLowerCase();
+    if (!lang.startsWith(lp)) return false;
+
+    if (lp === 'en') {
+      if (!allowedEnRegions.some(r => lang.startsWith(r))) return false;
+    } else if (lp === 'zh') {
+      if (lang.includes('hk')) return false;
+      if (/xiaoni/i.test(v.name)) return false;
+    }
+    return true;
+  });
+
+  // 英语排序顺序: 美国 > 澳大利亚 > 加拿大 > 英国
+  if (lp === 'en') {
+    const order = ['en-us','en-au','en-ca','en-gb'];
+    filtered.sort((a,b)=>{
+      const al = a.lang.toLowerCase(), bl = b.lang.toLowerCase();
+      const ai = order.findIndex(p => al.startsWith(p));
+      const bi = order.findIndex(p => bl.startsWith(p));
+      if (ai !== bi) return ai - bi;
+      return a.name.localeCompare(b.name);
+    });
+  } else if (lp === 'zh') {
+    filtered.sort((a,b)=>{
+      const ax = /xiaoxiao/i.test(a.name) ? 0 : 1;
+      const bx = /xiaoxiao/i.test(b.name) ? 0 : 1;
+      if (ax !== bx) return ax - bx;
+      return a.name.localeCompare(b.name);
+    });
+  } else if (lp === 'ja') {
+    // 日语排序：Nanami -> Keita -> 其他
+    const rank = n => /nanami online/i.test(n) ? 0 : /keita online/i.test(n) ? 1 : 2;
+    filtered.sort((a,b)=>{
+      const ra = rank(a.name), rb = rank(b.name);
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  selectEl.innerHTML = '';
+  filtered.forEach(v=>{
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI;
+    opt.textContent = `${v.name} (${v.lang})`;
+    selectEl.appendChild(opt);
+  });
+
+  if(filtered.length === 0){
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '无可用语音';
+    selectEl.appendChild(opt);
+  } else {
+    if (filtered.some(v => v.voiceURI === prevValue)) {
+      selectEl.value = prevValue;
+    } else {
+      selectEl.value = filtered[0].voiceURI;
+    }
+  }
+}
+
+/* 新增：应用英语默认语音 */
+function applyEnglishDefault(selectEl, which){
+  if(selectEl.options.length === 0) return;
+  if(which === 's1' && speaker1EnglishDefaultApplied) return;
+  if(which === 's2' && speaker2EnglishDefaultApplied) return;
+  const opts = Array.from(selectEl.options);
+  let target = opts.find(o => o.text.startsWith(defaultEnglishVoiceName));
+  if(!target){
+    target = opts.find(o => /EmmaMultilingual/i.test(o.text) && /English \(United States\)/i.test(o.text));
+  }
+  if(target){
+    selectEl.value = target.value;
+    if(which === 's1') speaker1EnglishDefaultApplied = true;
+    else speaker2EnglishDefaultApplied = true;
+    console.log(`[${which}] 英语默认已设为: ${target.text}`);
+  } else {
+    console.log(`[${which}] 未找到默认 EmmaMultilingual 英语语音，保持当前第一项。`);
+  }
+}
+
+// 新增针对 Speaker5
+function applySpeaker5EnglishDefaultIfNeeded(){
+  if (speaker5EnglishDefaultApplied) return;
+  if (speaker5LangEl.value !== 'en') return;
+  const opts = Array.from(speaker5VoiceEl.options);
+  if(!opts.length) return;
+  let target = opts.find(o=>o.text.startsWith(defaultSpeaker5EnglishVoiceName));
+  if(!target) target = opts.find(o=>/EmmaMultilingual/i.test(o.text));
+  if(target){
+    speaker5VoiceEl.value = target.value;
+    speaker5EnglishDefaultApplied = true;
+    console.log('[Speaker5] 英语默认已设为:', target.text);
+  }
+}
+
+// 新增针对 Speaker6 (Christopher)
+function applySpeaker6EnglishDefaultIfNeeded(){
+  if (speaker6EnglishDefaultApplied) return;
+  if (speaker6LangEl.value !== 'en') return;
+  const opts = Array.from(speaker6VoiceEl.options);
+  if(!opts.length) return;
+  let target = opts.find(o=>o.text.startsWith(defaultSpeaker6EnglishVoiceName));
+  if(!target) target = opts.find(o=>/Christopher Online/i.test(o.text));
+  if(target){
+    speaker6VoiceEl.value = target.value;
+    speaker6EnglishDefaultApplied = true;
+    console.log('[Speaker6] 英语默认已设为:', target.text);
+  } else {
+    console.log('[Speaker6] 未找到 Christopher，等待 voiceschanged。');
+  }
+}
+
+function applySpeaker2DefaultIfNeeded(){
+  if (speaker2DefaultApplied) return;
+  // 仅当中文
+  if (speaker2LangEl.value !== 'zh') return;
+
+  const opts = Array.from(speaker2VoiceEl.options);
+  if (opts.length === 0 || (opts.length === 1 && opts[0].value === '')) return;
+
+  // 优先 Yunxi, 其次 Xiaoxiao
+  let target = opts.find(o => o.text.startsWith(defaultSpeaker2VoiceName));
+  if (!target) target = opts.find(o => /yunxi online/i.test(o.text));
+  if (!target) target = opts.find(o => /xiaoxiao online/i.test(o.text));
+
+  if (target){
+    speaker2VoiceEl.value = target.value;
+    speaker2DefaultApplied = true;
+    console.log('[Speaker2] 已设为默认:', target.text);
+  } else {
+    console.log('[Speaker2] 未找到 Yunxi/Xiaoxiao，等待下一次 voiceschanged 再尝试。');
+  }
+}
+
+/* ==== 新增：应用 Speaker3 / Speaker4 默认日语语音 ==== */
+function applySpeaker3DefaultIfNeeded(){
+  if (speaker3DefaultApplied) return;
+  if (speaker3LangEl.value !== 'ja') return;
+  const opts = Array.from(speaker3VoiceEl.options);
+  if (!opts.length) return;
+  let target = opts.find(o => o.text.startsWith(defaultSpeaker3VoiceName));
+  if (!target) target = opts.find(o => /nanami online/i.test(o.text));
+  if (target){
+    speaker3VoiceEl.value = target.value;
+    speaker3DefaultApplied = true;
+    console.log('[Speaker3] 已设为默认:', target.text);
+  } else {
+    console.log('[Speaker3] 未找到 Nanami，等待 voiceschanged。');
+  }
+}
+
+function applySpeaker4DefaultIfNeeded(){
+  if (speaker4DefaultApplied) return;
+  if (speaker4LangEl.value !== 'ja') return;
+  const opts = Array.from(speaker4VoiceEl.options);
+  if (!opts.length) return;
+  // 优先精确 Keita
+  let target = opts.find(o => o.text.startsWith(defaultSpeaker4VoiceName));
+  if (!target) target = opts.find(o => /keita online/i.test(o.text));
+  if (target){
+    speaker4VoiceEl.value = target.value;
+    speaker4DefaultApplied = true;
+    console.log('[Speaker4] 已设为默认:', target.text);
+  } else {
+    console.log('[Speaker4] 未找到 Keita，等待 voiceschanged。');
+  }
+}
+
+function loadVoices(){
+  voices = synth.getVoices();
+  console.log('========== 全部语音列表 ==========');
+  voices.forEach((v,i)=>console.log(`${i}. name: ${v.name} | lang: ${v.lang}`));
+  console.log('总数:', voices.length);
+
+  populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value);
+  if(speaker1LangEl.value === 'en') applyEnglishDefault(speaker1VoiceEl,'s1');
+
+  if (!userPickedSpeaker2Lang) speaker2LangEl.value = 'zh';
+  populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value);
+  applySpeaker2DefaultIfNeeded();
+
+  populateVoiceSelect(speaker3VoiceEl, speaker3LangEl.value);
+  populateVoiceSelect(speaker4VoiceEl, speaker4LangEl.value);
+  populateVoiceSelect(speaker5VoiceEl, speaker5LangEl.value);
+  populateVoiceSelect(speaker6VoiceEl, speaker6LangEl.value);
+
+  if(speaker3LangEl.value === 'ja') applySpeaker3DefaultIfNeeded();
+  if(speaker4LangEl.value === 'ja') applySpeaker4DefaultIfNeeded(); // 新增：确保 Speaker 4 选中 Keita
+
+  if(speaker3LangEl.value === 'en') applyEnglishDefault?.(speaker3VoiceEl,'s3');
+  if(speaker4LangEl.value === 'en') applyEnglishDefault?.(speaker4VoiceEl,'s4');
+  if(speaker5LangEl.value === 'en') applySpeaker5EnglishDefaultIfNeeded();
+  if(speaker6LangEl.value === 'en') applySpeaker6EnglishDefaultIfNeeded();
+}
+
+synth.onvoiceschanged = loadVoices;
+loadVoices();
+
+/* 修改语言下拉事件：标记用户已主动选择，保持当前选项 */
+speaker1LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker1Lang = true;
+  populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value);
+  if(speaker1LangEl.value === 'en') applyEnglishDefault(speaker1VoiceEl,'s1');
+});
+speaker2LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker2Lang = true;
+  populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value);
+  if(speaker2LangEl.value === 'zh') applySpeaker2DefaultIfNeeded();
+  if(speaker2LangEl.value === 'en') applyEnglishDefault(speaker2VoiceEl,'s2');
+});
+speaker3LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker3Lang = true;
+  populateVoiceSelect(speaker3VoiceEl, speaker3LangEl.value);
+  if(speaker3LangEl.value === 'ja') applySpeaker3DefaultIfNeeded();
+  if(speaker3LangEl.value === 'en') applyEnglishDefault?.(speaker3VoiceEl,'s3');
+});
+speaker4LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker4Lang = true;
+  populateVoiceSelect(speaker4VoiceEl, speaker4LangEl.value);
+  if (speaker4LangEl.value === 'ja') applySpeaker4DefaultIfNeeded();
+  if (speaker4LangEl.value === 'en') applyEnglishDefault?.(speaker4VoiceEl,'s4');
+});
+speaker5LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker5Lang = true;
+  populateVoiceSelect(speaker5VoiceEl, speaker5LangEl.value);
+  if(speaker5LangEl.value === 'en') applySpeaker5EnglishDefaultIfNeeded();
+});
+speaker6LangEl.addEventListener('change', ()=>{
+  userPickedSpeaker6Lang = true;
+  populateVoiceSelect(speaker6VoiceEl, speaker6LangEl.value);
+  if(speaker6LangEl.value === 'en') applySpeaker6EnglishDefaultIfNeeded();
+});
+
+// 若需在脚本中再次确保（用户未手动改过时）：
+if(!userPickedSpeaker5Lang) speaker5LangEl.value = 'en';
+populateVoiceSelect(speaker5VoiceEl, speaker5LangEl.value);
+if(speaker5LangEl.value === 'en') applySpeaker5EnglishDefaultIfNeeded();
+
+// 确保 Speaker 6 默认英语（用户未手动改动时）
+if(!userPickedSpeaker6Lang) speaker6LangEl.value = 'en';
+populateVoiceSelect(speaker6VoiceEl, speaker6LangEl.value);
+if(speaker6LangEl.value === 'en') applySpeaker6EnglishDefaultIfNeeded();
+
+/* 文本变化更新预览 */
+textEl.addEventListener('input', renderPreview);
+renderPreview();
+
+/* 朗读一行（Promise 封装） */
+function speakLine(text, voice){
+  return new Promise((resolve,reject)=>{
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice) u.voice = voice;
+    u.onend = ()=> resolve();
+    u.onerror = (e)=> reject(e);
+    synth.speak(u);
+  });
+}
+
+/* 替换 parseLine 函数 */
+function parseLine(raw){
+  const m = raw.match(/^Speaker\s+([1-6]):\s*/);
+  let utterText = raw;
+  let voiceSelect = speaker1VoiceEl;
+  if(m){
+    const n = parseInt(m[1],10);
+    utterText = raw.slice(m[0].length);
+    switch(n){
+      case 1: voiceSelect = speaker1VoiceEl; break;
+      case 2: voiceSelect = speaker2VoiceEl; break;
+      case 3: voiceSelect = speaker3VoiceEl; break;
+      case 4: voiceSelect = speaker4VoiceEl; break;
+      case 5: voiceSelect = speaker5VoiceEl; break;
+      case 6: voiceSelect = speaker6VoiceEl; break;
+    }
+  }
+  const voice = voices.find(v=>v.voiceURI === voiceSelect.value);
+  return { utterText, voice };
+}
+
+/* 纯朗读（不录音） */
+async function readAloud(){
+  if(synth.speaking) synth.cancel();
+  cancelRequested = false;
+  setError('');
+  const lines = getLines();
+  if(!lines.length || voices.length === 0){
+    setError('请输入文本并确保语音已加载。');
+    return;
+  }
+  btnRead.disabled = true;
+  btnSpeakDownload.disabled = true;
+  btnCancel.disabled = true; // 等第一句开始后再允许取消
+
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested) break;
+    updateActiveLine(i);
+    const { utterText, voice } = parseLine(lines[i]);
+    if(!voice){ setError('未找到语音。'); break; }
+    btnCancel.disabled = false;
+    try{
+      await speakLine(utterText, voice);
+    }catch(e){
+      console.error(e);
+      setError('朗读出错。');
+      break;
+    }
+  }
+  synth.cancel();
+  updateActiveLine(-1);
+  btnRead.disabled = false;
+  btnSpeakDownload.disabled = false;
+  btnCancel.disabled = true;
+}
+
+/* WAV 录音器：开始共享后返回 stop */
+function startWavRecorder(){
+  return new Promise(async (resolve,reject)=>{
+    try{
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+      stream.getVideoTracks().forEach(t=>t.stop());
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096,1,1);
+      const chunks = [];
+      source.connect(processor);
+      processor.connect(ctx.destination);
+      processor.onaudioprocess = e=>{
+        chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+      function stop(){
+        processor.disconnect();
+        source.disconnect();
+        stream.getAudioTracks().forEach(t=>t.stop());
+        // 合并
+        let length = chunks.reduce((s,a)=>s+a.length,0);
+        const pcmBuffer = new DataView(new ArrayBuffer(length*2));
+        let offset=0;
+        chunks.forEach(f32=>{
+          for(let i=0;i<f32.length;i++,offset+=2){
+            let s = Math.max(-1, Math.min(1, f32[i]));
+            pcmBuffer.setInt16(offset, s<0 ? s*0x8000 : s*0x7FFF, true);
+          }
+        });
+        // 封装 WAV
+        const sampleRate = ctx.sampleRate;
+        const wav = new DataView(new ArrayBuffer(44 + pcmBuffer.byteLength));
+        const wStr = (o,str)=>{ for(let i=0;i<str.length;i++) wav.setUint8(o+i,str.charCodeAt(i)); };
+        wStr(0,'RIFF');
+        wav.setUint32(4, 36 + pcmBuffer.byteLength, true);
+        wStr(8,'WAVE'); wStr(12,'fmt ');
+        wav.setUint32(16,16,true); // PCM chunk size
+        wav.setUint16(20,1,true);  // PCM
+        wav.setUint16(22,1,true);  // mono
+        wav.setUint32(24,sampleRate,true);
+        wav.setUint32(28,sampleRate*2,true);
+        wav.setUint16(32,2,true);
+        wav.setUint16(34,16,true);
+        wStr(36,'data');
+        wav.setUint32(40, pcmBuffer.byteLength, true);
+        new Uint8Array(wav.buffer,44).set(new Uint8Array(pcmBuffer.buffer));
+        return new Blob([wav.buffer], { type:'audio/wav' });
+      }
+      resolve({ stop });
+    }catch(e){
+      reject(e);
+    }
+  });
+}
+
+/* 朗读 + 录音（生成 WAV） */
+async function speakAndDownload(){
+  if(synth.speaking) synth.cancel();
+  cancelRequested = false;
+  setError('请在弹窗中选择“此标签页”并勾选共享音频。');
+  const lines = getLines();
+  if(!lines.length || voices.length === 0){
+    setError('请输入文本并确保语音已加载。');
+    return;
+  }
+  btnRead.disabled = true;
+  btnSpeakDownload.disabled = true;
+  btnCancel.disabled = true;
+
+  let recorder;
+  try{
+    recorder = await startWavRecorder();
+  }catch(e){
+    setError('未能获取标签页音频或已取消共享。');
+    btnRead.disabled = false;
+    btnSpeakDownload.disabled = false;
+    return;
+  }
+  setError('正在朗读并录音…');
+  btnCancel.disabled = false;
+
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested) break;
+    updateActiveLine(i);
+    const { utterText, voice } = parseLine(lines[i]);
+    if(!voice){ setError('未找到语音。'); break; }
+    try{
+      await speakLine(utterText, voice);
+    }catch(e){
+      console.error(e);
+      setError('朗读出错。');
+      break;
+    }
+  }
+  synth.cancel();
+  updateActiveLine(-1);
+  btnCancel.disabled = true;
+
+  try{
+    const wavBlob = recorder.stop();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(wavBlob);
+    a.download = 'tts-audio.wav';
+    a.click();
+    setError('WAV 文件已下载。');
+  }catch(e){
+    setError('生成 WAV 失败。');
+  }
+  btnRead.disabled = false;
+  btnSpeakDownload.disabled = false;
+}
+
+/* 取消按钮 */
+btnCancel.addEventListener('click', ()=>{
+  cancelRequested = true;
+  synth.cancel();
+  setError('已取消。');
+});
+
+/* 事件绑定 */
+btnRead.addEventListener('click', readAloud);
+btnSpeakDownload.addEventListener('click', speakAndDownload);
+
+/* 页面初始 */
+renderPreview();
+</script>
+</body>
