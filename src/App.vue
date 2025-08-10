@@ -180,7 +180,72 @@ const filteredVoicesByLang = (lang: string) => {
   return voices.value.filter(v => v.lang.startsWith(lang));
 };
 
-// 将文本转换为语音文件的函数  TODO
+// 旧的 recordTabAsWav（按固定时长）会在未等待用户点“共享”时就开始朗读 => 改成可 start/stop 的录制器
+// 新：startWavRecorder 等待用户完成“共享”后再返回 recorder，朗读再开始
+function startWavRecorder() {
+  return new Promise<{
+    stop: () => Blob
+  }>(async (resolve, reject) => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      // 只要音频，视频轨道关掉
+      stream.getVideoTracks().forEach(t => t.stop());
+
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      const samples: Float32Array[] = [];
+      source.connect(processor);
+      processor.connect(ctx.destination);
+      processor.onaudioprocess = e => {
+        samples.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+
+      const stop = () => {
+        processor.disconnect();
+        source.disconnect();
+        stream.getAudioTracks().forEach(t => t.stop());
+
+        // 合并 Float32 -> PCM16
+        let length = samples.reduce((sum, a) => sum + a.length, 0);
+        const pcm16 = new DataView(new ArrayBuffer(length * 2));
+        let offset = 0;
+        for (const f32 of samples) {
+          for (let i = 0; i < f32.length; i++, offset += 2) {
+            let s = Math.max(-1, Math.min(1, f32[i]));
+            pcm16.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+          }
+        }
+        // 封装 WAV
+        const sampleRate = ctx.sampleRate;
+        const buffer = new ArrayBuffer(44 + pcm16.byteLength);
+        const view = new DataView(buffer);
+        const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+        w(0,'RIFF');
+        view.setUint32(4, 36 + pcm16.byteLength, true);
+        w(8,'WAVE');
+        w(12,'fmt ');
+        view.setUint32(16,16,true);
+        view.setUint16(20,1,true);      // PCM
+        view.setUint16(22,1,true);      // mono
+        view.setUint32(24,sampleRate,true);
+        view.setUint32(28,sampleRate*2,true);
+        view.setUint16(32,2,true);
+        view.setUint16(34,16,true);
+        w(36,'data');
+        view.setUint32(40, pcm16.byteLength, true);
+        new Uint8Array(buffer,44).set(new Uint8Array(pcm16.buffer));
+        return new Blob([buffer], { type: 'audio/wav' });
+      };
+
+      resolve({ stop });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+// 将文本转换为语音文件的函数
 const speak = async () => {
   if (synth.speaking) synth.cancel();
   if (!text.value || voices.value.length === 0) {
@@ -188,98 +253,59 @@ const speak = async () => {
     return;
   }
 
-  // 1. 捕获标签页音频
-  let stream: MediaStream;
+  // 1. 先请求共享（等待用户点击“共享”完成）——避免“还没共享就开始朗读”
+  errorMessage.value = '请在弹窗中选择“此标签页”并勾选共享音频，然后点击共享。';
+  let recorder: { stop: () => Blob };
   try {
-    errorMessage.value = '请在弹窗中选择“此标签页”并勾选“共享此标签页的音频”';
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    });
-    // 关闭视频轨道，节省资源
-    stream.getVideoTracks().forEach(t => t.stop());
-  } catch (err) {
-    errorMessage.value = '未能获取标签页音频，请允许浏览器权限并勾选音频。';
+    recorder = await startWavRecorder(); // 等待用户授权完成
+  } catch (e) {
+    errorMessage.value = '获取标签页音频失败或已取消共享。';
     return;
   }
+  errorMessage.value = '正在朗读并录音，请稍候…';
 
-  // 2. 选择合适的 mimeType
-  const mimeCandidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/ogg;codecs=opus'
-  ];
-  let mimeType = '';
-  for (const c of mimeCandidates) {
-    if (MediaRecorder.isTypeSupported(c)) { mimeType = c; break; }
-  }
-  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-  recordedChunks = [];
-
-  mediaRecorder.ondataavailable = e => {
-    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-  };
-  mediaRecorder.onstart = () => {
-    isRecording.value = true;
-    errorMessage.value = '正在录制，请等待朗读完成...';
-  };
-  mediaRecorder.onstop = () => {
-    isRecording.value = false;
-    errorMessage.value = '录制已完成，正在下载...';
-    const blob = new Blob(recordedChunks, { type: mediaRecorder!.mimeType || 'audio/webm' });
-    recordedChunks = [];
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tts-audio.webm';
-    a.click();
-    // 释放音频轨道
-    stream.getAudioTracks().forEach(t => t.stop());
-    errorMessage.value = '录音已下载。';
-  };
-
-  // 3. 开始录音
-  mediaRecorder.start();
-
-  // 4. 朗读文本（与 readAloud 逻辑类似，但不高亮）
-  const lines = text.value.split('\n').filter(line => line.trim() !== '');
+  // 2. 逐行朗读
+  const lines = text.value.split('\n').filter(l => l.trim() !== '');
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    let utterText = line;
+    const raw = lines[i];
+    let utterText = raw;
     let voice: SpeechSynthesisVoice | undefined;
 
-    if (line.startsWith('Speaker 1:')) {
+    if (raw.startsWith('Speaker 1:')) {
       voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
-      utterText = line.replace(/^Speaker 1:\s*/, '');
-    } else if (line.startsWith('Speaker 2:')) {
+      utterText = raw.replace(/^Speaker 1:\s*/, '');
+    } else if (raw.startsWith('Speaker 2:')) {
       voice = voices.value.find(v => v.voiceURI === speaker2VoiceURI.value);
-      utterText = line.replace(/^Speaker 2:\s*/, '');
+      utterText = raw.replace(/^Speaker 2:\s*/, '');
     } else {
       voice = voices.value.find(v => v.voiceURI === speaker1VoiceURI.value);
     }
 
     if (!voice) {
-      errorMessage.value = '未找到合适的语音，请从下拉列表中选择一个。';
-      mediaRecorder.stop();
+      errorMessage.value = '未找到合适的语音，请重新选择。';
       return;
     }
 
-    let utterance = new SpeechSynthesisUtterance(utterText);
-    utterance.voice = voice;
-
-    utterance.onerror = (event) => {
-      console.error('SpeechSynthesisUtterance.onerror', event);
-      errorMessage.value = `语音生成时发生错误: ${event.error}`;
-      mediaRecorder.stop();
-    };
-
-    await new Promise<void>((resolve) => {
-      utterance.onend = () => resolve();
-      synth.speak(utterance);
+    const utter = new SpeechSynthesisUtterance(utterText);
+    utter.voice = voice;
+    await new Promise<void>((resolve, reject) => {
+      utter.onend = () => resolve();
+      utter.onerror = (e) => {
+        console.error(e);
+        errorMessage.value = '朗读出错';
+        reject(e);
+      };
+      synth.speak(utter);
     });
   }
 
-  // 5. 停止录音并下载
-  mediaRecorder.stop();
+  // 3. 停止录制并下载
+  const wavBlob = recorder.stop();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(wavBlob);
+  a.download = 'tts-audio.wav';
+  a.click();
+  errorMessage.value = 'WAV 文件已下载。';
 }
 
 // 新增朗读功能（不录音，仅朗读）
