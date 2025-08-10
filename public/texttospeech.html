@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-v-app>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>文本转语音应用</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}
+body{margin:0;background:#f0f2f5;color:#222;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:12px;}
+.app-container{background:#fff;width:95%;max-width:1800px;min-width:600px;margin:0 auto;padding:1.8rem 2rem;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:1.4rem;}
+h1{margin:0 0 .5rem;font-size:1.7rem;}
+.control-group{display:flex;flex-direction:column;gap:.5rem;}
+.voice-select-row{display:flex;gap:.6rem;flex-wrap:wrap;}
+.select-box,.short-select{padding:.55rem .75rem;border:2px solid #5b8cff;border-radius:8px;background:#132342;color:#fff;font-weight:600;min-width:160px;}
+.select-box option{background:#1c2f55;color:#fff;}
+.short-select{max-width:110px;}
+.text-area{width:100%;padding:.9rem 1rem;border:1px solid #bbb;border-radius:10px;font-size:1rem;min-height:36rem;resize:vertical;line-height:1.5;}
+.action-buttons{display:flex;gap:1rem;width:100%;flex-wrap:wrap;}
+.action-button{flex:1;min-width:180px;background:#1976d2;color:#fff;border:none;padding:.9rem 1.2rem;font-size:1.05rem;border-radius:8px;cursor:pointer;font-weight:600;letter-spacing:.5px;transition:.18s;}
+.action-button:hover{background:#125da6;}
+.action-button:disabled{background:#9e9e9e;cursor:not-allowed;}
+.read-lines-preview{background:#f7fafd;border:1px solid #d8e4f5;border-radius:10px;padding:1rem;max-height:320px;overflow:auto;line-height:1.4;}
+.read-line{padding:.25rem .55rem;border-radius:6px;font-size:1.25em;transition:background .2s,color .2s;}
+.read-line.active{background:#ffe082;color:#e53935;font-weight:700;font-size:1.45em;}
+.error-message{color:#d32f2f;font-weight:600;}
+.footer-hint{font-size:.78rem;color:#666;margin-top:.5rem;}
+::-webkit-scrollbar{width:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#b5c5dd;border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:#94aac7;}
+</style>
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <h1>文本转语音应用</h1>
+      <div class="footer-hint">提示：生成语音并下载 时请选择“此标签页”并勾选“分享此标签页音频 / Share tab audio”。某些浏览器可能无法录制合成语音。</div>
+    </header>
+
+    <!-- Speaker 1 -->
+    <div class="control-group">
+      <label>Speaker 1 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker1Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker1Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- Speaker 2 -->
+    <div class="control-group">
+      <label>Speaker 2 语音:</label>
+      <div class="voice-select-row">
+        <select id="speaker2Lang" class="short-select">
+          <option value="en">英语</option>
+          <option value="zh">汉语</option>
+          <option value="ja">日语</option>
+        </select>
+        <select id="speaker2Voice" class="select-box"></select>
+      </div>
+    </div>
+
+    <!-- 文本输入 -->
+    <div class="control-group">
+      <label for="textInput">请输入文本 (可用 Speaker 1:/Speaker 2: 前缀分配不同语音):</label>
+      <textarea id="textInput" class="text-area"></textarea>
+    </div>
+
+    <!-- 按钮 -->
+    <div class="action-buttons">
+      <button id="btnRead" class="action-button">朗读</button>
+      <button id="btnSpeakDownload" class="action-button">生成语音并下载 (WAV)</button>
+      <button id="btnCancel" class="action-button" disabled>取消朗读</button>
+    </div>
+
+    <!-- 当前行预览 -->
+    <div class="control-group">
+      <label>朗读预览 (自动高亮当前行):</label>
+      <div id="linesPreview" class="read-lines-preview"></div>
+    </div>
+
+    <div id="errorBox" class="error-message"></div>
+  </div>
+
+<script>
+/* 状态 */
+const textEl = document.getElementById('textInput');
+const speaker1LangEl = document.getElementById('speaker1Lang');
+const speaker2LangEl = document.getElementById('speaker2Lang');
+const speaker1VoiceEl = document.getElementById('speaker1Voice');
+const speaker2VoiceEl = document.getElementById('speaker2Voice');
+const btnRead = document.getElementById('btnRead');
+const btnSpeakDownload = document.getElementById('btnSpeakDownload');
+const btnCancel = document.getElementById('btnCancel');
+const linesPreview = document.getElementById('linesPreview');
+const errorBox = document.getElementById('errorBox');
+
+const synth = window.speechSynthesis;
+let voices = [];
+let cancelRequested = false;
+let currentLineIndex = -1;
+
+/* 初始文本示例 */
+textEl.value = `Speaker 1: Hello, this is a demo.
+Speaker 2: 你好，我是第二个说话人。
+Just a third line without prefix.
+Speaker 1: Back to speaker one.`;
+
+/* 工具函数 */
+function setError(msg){ errorBox.textContent = msg || ''; }
+
+/* 渲染预览行 */
+function renderPreview(){
+  const lines = getLines();
+  linesPreview.innerHTML = '';
+  lines.forEach((line, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'read-line' + (idx === currentLineIndex ? ' active':'');
+    div.textContent = line;
+    linesPreview.appendChild(div);
+  });
+}
+function updateActiveLine(idx){
+  currentLineIndex = idx;
+  Array.from(linesPreview.children).forEach((el,i)=>{
+    el.classList.toggle('active', i === idx);
+  });
+}
+function getLines(){
+  return textEl.value.split('\n').map(l=>l.trimEnd()).filter(l=>l.trim() !== '');
+}
+
+/* 语音过滤 */
+function populateVoiceSelect(selectEl, langPrefix){
+  const filtered = voices.filter(v => v.lang.toLowerCase().startsWith(langPrefix.toLowerCase()));
+  selectEl.innerHTML = '';
+  filtered.forEach(v=>{
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI;
+    opt.textContent = `${v.name} (${v.lang})`;
+    selectEl.appendChild(opt);
+  });
+  if(filtered.length === 0){
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '无可用语音';
+    selectEl.appendChild(opt);
+  }
+  // 默认选第一个
+  if(filtered.length > 0) selectEl.value = filtered[0].voiceURI;
+}
+
+function loadVoices(){
+  voices = synth.getVoices();
+  populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value);
+  populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value);
+}
+synth.onvoiceschanged = loadVoices;
+loadVoices();
+
+/* 监听语言选择变化 */
+speaker1LangEl.addEventListener('change', ()=>populateVoiceSelect(speaker1VoiceEl, speaker1LangEl.value));
+speaker2LangEl.addEventListener('change', ()=>populateVoiceSelect(speaker2VoiceEl, speaker2LangEl.value));
+
+/* 文本变化更新预览 */
+textEl.addEventListener('input', renderPreview);
+renderPreview();
+
+/* 朗读一行（Promise 封装） */
+function speakLine(text, voice){
+  return new Promise((resolve,reject)=>{
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice) u.voice = voice;
+    u.onend = ()=> resolve();
+    u.onerror = (e)=> reject(e);
+    synth.speak(u);
+  });
+}
+
+/* 获取行对应语音和文本 */
+function parseLine(raw){
+  let utterText = raw;
+  let voice = null;
+  if(raw.startsWith('Speaker 1:')){
+    utterText = raw.replace(/^Speaker 1:\s*/,'');
+    voice = voices.find(v=>v.voiceURI === speaker1VoiceEl.value);
+  }else if(raw.startsWith('Speaker 2:')){
+    utterText = raw.replace(/^Speaker 2:\s*/,'');
+    voice = voices.find(v=>v.voiceURI === speaker2VoiceEl.value);
+  }else{
+    voice = voices.find(v=>v.voiceURI === speaker1VoiceEl.value);
+  }
+  return { utterText, voice };
+}
+
+/* 纯朗读（不录音） */
+async function readAloud(){
+  if(synth.speaking) synth.cancel();
+  cancelRequested = false;
+  setError('');
+  const lines = getLines();
+  if(!lines.length || voices.length === 0){
+    setError('请输入文本并确保语音已加载。');
+    return;
+  }
+  btnRead.disabled = true;
+  btnSpeakDownload.disabled = true;
+  btnCancel.disabled = true; // 等第一句开始后再允许取消
+
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested) break;
+    updateActiveLine(i);
+    const { utterText, voice } = parseLine(lines[i]);
+    if(!voice){ setError('未找到语音。'); break; }
+    btnCancel.disabled = false;
+    try{
+      await speakLine(utterText, voice);
+    }catch(e){
+      console.error(e);
+      setError('朗读出错。');
+      break;
+    }
+  }
+  synth.cancel();
+  updateActiveLine(-1);
+  btnRead.disabled = false;
+  btnSpeakDownload.disabled = false;
+  btnCancel.disabled = true;
+}
+
+/* WAV 录音器：开始共享后返回 stop */
+function startWavRecorder(){
+  return new Promise(async (resolve,reject)=>{
+    try{
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:true });
+      stream.getVideoTracks().forEach(t=>t.stop());
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096,1,1);
+      const chunks = [];
+      source.connect(processor);
+      processor.connect(ctx.destination);
+      processor.onaudioprocess = e=>{
+        chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+      function stop(){
+        processor.disconnect();
+        source.disconnect();
+        stream.getAudioTracks().forEach(t=>t.stop());
+        // 合并
+        let length = chunks.reduce((s,a)=>s+a.length,0);
+        const pcmBuffer = new DataView(new ArrayBuffer(length*2));
+        let offset=0;
+        chunks.forEach(f32=>{
+          for(let i=0;i<f32.length;i++,offset+=2){
+            let s = Math.max(-1, Math.min(1, f32[i]));
+            pcmBuffer.setInt16(offset, s<0 ? s*0x8000 : s*0x7FFF, true);
+          }
+        });
+        // 封装 WAV
+        const sampleRate = ctx.sampleRate;
+        const wav = new DataView(new ArrayBuffer(44 + pcmBuffer.byteLength));
+        const wStr = (o,str)=>{ for(let i=0;i<str.length;i++) wav.setUint8(o+i,str.charCodeAt(i)); };
+        wStr(0,'RIFF');
+        wav.setUint32(4, 36 + pcmBuffer.byteLength, true);
+        wStr(8,'WAVE'); wStr(12,'fmt ');
+        wav.setUint32(16,16,true); // PCM chunk size
+        wav.setUint16(20,1,true);  // PCM
+        wav.setUint16(22,1,true);  // mono
+        wav.setUint32(24,sampleRate,true);
+        wav.setUint32(28,sampleRate*2,true);
+        wav.setUint16(32,2,true);
+        wav.setUint16(34,16,true);
+        wStr(36,'data');
+        wav.setUint32(40, pcmBuffer.byteLength, true);
+        new Uint8Array(wav.buffer,44).set(new Uint8Array(pcmBuffer.buffer));
+        return new Blob([wav.buffer], { type:'audio/wav' });
+      }
+      resolve({ stop });
+    }catch(e){
+      reject(e);
+    }
+  });
+}
+
+/* 朗读 + 录音（生成 WAV） */
+async function speakAndDownload(){
+  if(synth.speaking) synth.cancel();
+  cancelRequested = false;
+  setError('请在弹窗中选择“此标签页”并勾选共享音频。');
+  const lines = getLines();
+  if(!lines.length || voices.length === 0){
+    setError('请输入文本并确保语音已加载。');
+    return;
+  }
+  btnRead.disabled = true;
+  btnSpeakDownload.disabled = true;
+  btnCancel.disabled = true;
+
+  let recorder;
+  try{
+    recorder = await startWavRecorder();
+  }catch(e){
+    setError('未能获取标签页音频或已取消共享。');
+    btnRead.disabled = false;
+    btnSpeakDownload.disabled = false;
+    return;
+  }
+  setError('正在朗读并录音…');
+  btnCancel.disabled = false;
+
+  for(let i=0;i<lines.length;i++){
+    if(cancelRequested) break;
+    updateActiveLine(i);
+    const { utterText, voice } = parseLine(lines[i]);
+    if(!voice){ setError('未找到语音。'); break; }
+    try{
+      await speakLine(utterText, voice);
+    }catch(e){
+      console.error(e);
+      setError('朗读出错。');
+      break;
+    }
+  }
+  synth.cancel();
+  updateActiveLine(-1);
+  btnCancel.disabled = true;
+
+  try{
+    const wavBlob = recorder.stop();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(wavBlob);
+    a.download = 'tts-audio.wav';
+    a.click();
+    setError('WAV 文件已下载。');
+  }catch(e){
+    setError('生成 WAV 失败。');
+  }
+  btnRead.disabled = false;
+  btnSpeakDownload.disabled = false;
+}
+
+/* 取消按钮 */
+btnCancel.addEventListener('click', ()=>{
+  cancelRequested = true;
+  synth.cancel();
+  setError('已取消。');
+});
+
+/* 事件绑定 */
+btnRead.addEventListener('click', readAloud);
+btnSpeakDownload.addEventListener('click', speakAndDownload);
+
+/* 页面初始 */
+renderPreview();
+</script>
+</body>
