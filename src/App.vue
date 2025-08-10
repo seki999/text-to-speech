@@ -283,8 +283,12 @@ const speak = async () => {
 
     if (!voice) {
       errorMessage.value = '未找到合适的语音，请重新选择。';
+      currentLineIndex.value = null;
       return;
     }
+
+    // 高亮当前朗读行
+    currentLineIndex.value = i;
 
     const utter = new SpeechSynthesisUtterance(utterText);
     utter.voice = voice;
@@ -293,11 +297,14 @@ const speak = async () => {
       utter.onerror = (e) => {
         console.error(e);
         errorMessage.value = '朗读出错';
+        currentLineIndex.value = null;
         reject(e);
       };
       synth.speak(utter);
     });
   }
+
+  currentLineIndex.value = null; // 朗读完成取消高亮
 
   // 3. 停止录制并下载
   const wavBlob = recorder.stop();
